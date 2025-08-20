@@ -1,26 +1,26 @@
 {
-    "version": 2,
-    "builds": [
-      {
-        "src": "product-finder/package.json",
-        "use": "@vercel/static-build",
-        "config": { "distDir": "dist" }
-      },
-      {
-        "src": "backend/app.py",
-        "use": "@vercel/python"
+  "version": 2,
+  "builds": [
+    {
+      "src": "backend/app.py",
+      "use": "@vercel/python"
+    },
+    {
+      "src": "product-finder/package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "dist"
       }
-    ],
-    "routes": [
-      {
-        "src": "/api/(.*)",
-        "dest": "backend/app.py"
-      },
-      {
-        "src": "/(.*)",
-        "dest": "product-finder/dist/$1"
-      }
-    ],
-    "installCommand": "npm install --prefix product-finder && pip install -r backend/requirements.txt",
-    "buildCommand": "npm run build --prefix product-finder"
-  }
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/backend/app.py"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
