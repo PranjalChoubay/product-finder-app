@@ -23,6 +23,7 @@ export default function App() {
     if (query) {
       setLoading(true);
       setError("");
+      // This is the line that has been corrected
       fetch(`/api/search?q=${encodeURIComponent(query)}`)
         .then((res) => {
           if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
