@@ -1,0 +1,26 @@
+{
+    "version": 2,
+    "builds": [
+      {
+        "src": "product-finder/**",
+        "use": "@vercel/static-build",
+        "config": { "distDir": "dist" }
+      },
+      {
+        "src": "backend/index.js",
+        "use": "@vercel/node"
+      }
+    ],
+    "routes": [
+      {
+        "src": "/api/(.*)",
+        "dest": "backend/index.js"
+      },
+      {
+        "src": "/(.*)",
+        "dest": "product-finder/dist/$1"
+      }
+    ],
+    "installCommand": "npm install --prefix backend && npm install --prefix product-finder",
+    "buildCommand": "npm run build --prefix product-finder"
+  }
