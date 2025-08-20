@@ -7,20 +7,20 @@
         "config": { "distDir": "dist" }
       },
       {
-        "src": "backend/index.js",
-        "use": "@vercel/node"
+        "src": "backend/api/index.py",
+        "use": "@vercel/python"
       }
     ],
     "routes": [
       {
         "src": "/api/(.*)",
-        "dest": "backend/index.js"
+        "dest": "backend/api/app.py"
       },
       {
         "src": "/(.*)",
         "dest": "product-finder/dist/$1"
       }
     ],
-    "installCommand": "npm install --prefix backend && npm install --prefix product-finder",
+    "installCommand": "npm install --prefix product-finder && pip install -r backend/requirements.txt",
     "buildCommand": "npm run build --prefix product-finder"
   }
