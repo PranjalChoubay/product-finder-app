@@ -36,7 +36,7 @@ def calculate_search_score(product, query, query_terms):
     
     return score
 
-@app.route("/search")
+@app.route("/api/search")
 def search():
     try:
         query = request.args.get("q", "").strip()
@@ -88,7 +88,7 @@ def search():
         print(f"Unexpected error: {e}")
         return jsonify({"error": "Internal server error"}), 500
 
-@app.route("/search-suggestions")
+@app.route("/api/search-suggestions")
 def search_suggestions():
     """Get search suggestions based on available products"""
     try:
@@ -130,7 +130,7 @@ def search_suggestions():
         print(f"Unexpected error: {e}")
         return jsonify({"error": "Internal server error"}), 500
 
-@app.route("/products")
+@app.route("/api/products")
 def get_all_products():
     """Get all products from Fake Store API"""
     try:
@@ -144,7 +144,7 @@ def get_all_products():
         print(f"Unexpected error: {e}")
         return jsonify({"error": "Internal server error"}), 500
 
-@app.route("/health")
+@app.route("/api/health")
 def health_check():
     """Health check endpoint"""
     return jsonify({"status": "healthy", "message": "Backend is running with Fake Store API integration"})
