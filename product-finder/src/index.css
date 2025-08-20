@@ -1,0 +1,57 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom animations and utilities for premium visuals */
+@layer utilities {
+  @keyframes gradientShift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+  .animate-gradient {
+    animation: gradientShift 18s ease-in-out infinite;
+    background-size: 200% 200%;
+  }
+
+  @keyframes floatSlow {
+    0% { transform: translateY(0px); }
+    50% { transform: translateY(-12px); }
+    100% { transform: translateY(0px); }
+  }
+  .animate-float-slow { animation: floatSlow 12s ease-in-out infinite; }
+
+  @keyframes auroraMove {
+    0% { transform: translate3d(0, 0, 0) scale(1); }
+    50% { transform: translate3d(5%, -3%, 0) scale(1.05); }
+    100% { transform: translate3d(-5%, 4%, 0) scale(1.02); }
+  }
+  .animate-aurora { animation: auroraMove 24s ease-in-out infinite alternate; }
+
+  @keyframes spinSlow { to { transform: rotate(360deg); } }
+  .animate-spin-slow { animation: spinSlow 30s linear infinite; }
+
+  .grid-overlay {
+    background-image:
+      linear-gradient(to right, rgba(255,255,255,0.08) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255,255,255,0.08) 1px, transparent 1px);
+    background-size: 48px 48px, 48px 48px;
+    mask-image: radial-gradient(60% 50% at 50% 50%, black, transparent);
+  }
+
+  .vignette {
+    box-shadow: inset 0 0 160px rgba(0,0,0,0.6);
+    pointer-events: none;
+  }
+
+  /* Hide scrollbars utility */
+  .scrollbar-hide::-webkit-scrollbar { display: none; }
+  .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+}
+
+/* Base page background for luxury dark theme */
+@layer base {
+  body {
+    @apply bg-slate-900 text-gray-100;
+  }
+}
