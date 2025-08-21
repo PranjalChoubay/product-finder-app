@@ -69,7 +69,7 @@ export default function ProductCard({ product }) {
             <div className="absolute inset-0 animate-pulse bg-slate-800" />
           )}
           <img
-            src={product.image}
+            src={product.thumbnail}
             alt={product.title}
             loading="lazy"
             onLoad={() => setIsImageLoaded(true)}
