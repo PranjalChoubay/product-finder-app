@@ -62,7 +62,7 @@ export default function ProductScroll({ products }) {
     lastTapRef.current = { time: now, id };
   };
 
-  // --- NEW: Stable seeded counts (likes & reviews) per product ---
+  // --- Stable seeded counts (likes & reviews) per product ---
   const seededCounts = useMemo(() => {
     const map = new Map();
     for (const p of products) {
@@ -70,7 +70,7 @@ export default function ProductScroll({ products }) {
       let h = 0;
       for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 10000;
       const likes = 120 + (h % 880); // 120–999
-      const reviews = 7 + ((Math.floor(h / 7)) % 193); // 7–199
+      const reviews = 7 + Math.floor(h / 7) % 193; // 7–199
       map.set(p.id, { likes, reviews });
     }
     return map;
@@ -93,7 +93,7 @@ export default function ProductScroll({ products }) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  // --- IMPROVED: Debounced Intersection Observer + snap-stop to avoid skipping ---
+  // --- Debounced Intersection Observer + snap-stop to avoid skipping ---
   useEffect(() => {
     const container = containerRef.current;
     if (!container || segmentSize === 0) return;
@@ -124,20 +124,20 @@ export default function ProductScroll({ products }) {
           container.scrollTo({ top: container.scrollTop + segmentSize * vh, behavior: "auto" });
           setTimeout(() => {
             isJumpingRef.current = false;
-          }, 40);
+          }, 50);
         } else if (newIndex >= 2 * segmentSize) {
           isJumpingRef.current = true;
           container.scrollTo({ top: container.scrollTop - segmentSize * vh, behavior: "auto" });
           setTimeout(() => {
             isJumpingRef.current = false;
-          }, 40);
+          }, 50);
         }
       }, 120);
     };
 
     const observer = new IntersectionObserver(observerCallback, {
       root: container,
-      threshold: 0.9, // nearly full item visible to mark as active
+      threshold: 0.9,
     });
 
     sectionRefs.current.forEach((ref) => {
@@ -152,46 +152,73 @@ export default function ProductScroll({ products }) {
     };
   }, [segmentSize]);
 
-  // --- NEW: One-item-per-flick on mobile (hard-stops) ---
+  // --- NEW: Perfect "Drag & Release" Scrolling for Mobile ---
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
 
     let startY = 0;
     let startTop = 0;
-    let moved = false;
     let startTime = 0;
+    let isDragging = false;
+    let animationFrameId = null;
 
     const onTouchStart = (e) => {
-      if (e.touches.length !== 1) return;
+      isDragging = true;
       startY = e.touches[0].clientY;
       startTop = el.scrollTop;
       startTime = Date.now();
-      moved = false;
+      // Disable CSS snapping during manual drag for direct control
+      el.style.scrollSnapType = "none";
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+      }
     };
 
     const onTouchMove = (e) => {
-      // Allow natural scroll but track movement
-      moved = true;
+      if (!isDragging) return;
+      
+      const updateScroll = () => {
+        const currentY = e.touches[0].clientY;
+        const deltaY = currentY - startY;
+        el.scrollTop = startTop - deltaY;
+        animationFrameId = null;
+      };
+      
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+      }
+      animationFrameId = requestAnimationFrame(updateScroll);
     };
 
     const onTouchEnd = () => {
-      if (!moved) return;
-      const dy = el.scrollTop - startTop; // how far we actually scrolled
-      const dt = Math.max(1, Date.now() - startTime);
+      if (!isDragging) return;
+      isDragging = false;
       const vh = window.innerHeight;
+      const dt = Date.now() - startTime;
+      const endTop = el.scrollTop;
+      const dy = endTop - startTop;
+      const velocity = dy / dt;
 
-      // Velocity/threshold based decision: exactly one step up/down
-      const threshold = Math.min(0.18 * vh, 120); // ~18% screen or 120px max
-      let direction = 0;
-      if (dy > threshold || (dy > 0 && Math.abs(dy) / dt > 0.35)) direction = 1; // next
-      else if (dy < -threshold || (dy < 0 && Math.abs(dy) / dt > 0.35)) direction = -1; // prev
+      // Re-enable snapping for the final animation
+      el.style.scrollSnapType = "y mandatory";
 
-      // Compute current physical index and target
-      const currentPhysicalIndex = Math.round(el.scrollTop / vh);
-      let targetPhysicalIndex = currentPhysicalIndex + direction;
+      // Determine target slide based on velocity and distance
+      const currentPhysicalIndex = Math.round(startTop / vh);
+      let targetPhysicalIndex = currentPhysicalIndex;
+      
+      const flickThreshold = 0.4; // Velocity threshold for a "flick"
+      const distanceThreshold = vh * 0.25; // Distance threshold (25% of screen)
 
-      // Snap to exact screen boundaries to avoid drift
+      if (Math.abs(velocity) > flickThreshold) {
+        // It's a flick, move to next/prev
+        targetPhysicalIndex = velocity > 0 ? currentPhysicalIndex + 1 : currentPhysicalIndex - 1;
+      } else if (Math.abs(dy) > distanceThreshold) {
+        // It's a slow drag past the threshold
+        targetPhysicalIndex = dy > 0 ? currentPhysicalIndex + 1 : currentPhysicalIndex - 1;
+      }
+      // Otherwise, it snaps back to the current slide
+
       const targetTop = targetPhysicalIndex * vh;
       el.scrollTo({ top: targetTop, behavior: "smooth" });
     };
@@ -204,6 +231,9 @@ export default function ProductScroll({ products }) {
       el.removeEventListener("touchstart", onTouchStart);
       el.removeEventListener("touchmove", onTouchMove);
       el.removeEventListener("touchend", onTouchEnd);
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+      }
     };
   }, []);
 
@@ -216,14 +246,14 @@ export default function ProductScroll({ products }) {
     return () => window.removeEventListener("keydown", onEsc);
   }, [reviewsOpenFor]);
 
-  // simple mock reviews (replace with backend later)
+  // simple mock reviews
   const mockReviews = [
     { user: "Aditi", rating: 5, text: "Great quality, totally worth it!" },
     { user: "Rohit", rating: 4, text: "Looks premium, delivery was fast." },
     { user: "Maya", rating: 4, text: "Exactly as shown. Good value." },
   ];
 
-  // --- NEW: Share handler + tiny toast ---
+  // --- Share handler + tiny toast ---
   const [toast, setToast] = useState("");
   const shareProduct = async (p) => {
     const url = (p.url || window.location.href) + `#product-${p.id}`;
@@ -274,7 +304,11 @@ export default function ProductScroll({ products }) {
               if (!likedIds.has(id)) toggleLike(id);
               triggerBurst(id);
             }}
-            onTouchEnd={() => handleTapLike(p.id)}
+            onTouchEndCapture={(e) => {
+              // use onTouchEndCapture to make sure our tap logic runs
+              // even if the scroll handler stops propagation.
+              handleTapLike(p.id);
+            }}
           >
             {/* Product image centered */}
             <img
