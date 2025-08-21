@@ -32,7 +32,6 @@ export default function SearchBar({ onSearch }) {
   };
 
   const handleInputBlur = () => {
-    // Delay hiding suggestions to allow clicking on them
     setTimeout(() => setShowSuggestions(false), 200);
   };
 
@@ -47,22 +46,22 @@ export default function SearchBar({ onSearch }) {
             onFocus={handleInputFocus}
             onBlur={handleInputBlur}
             placeholder="Search products..."
-            className="w-80 rounded-2xl border border-slate-700 bg-slate-800 px-4 py-2 text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-500"
+            className="w-96 rounded-full border border-gray-300 bg-white/80 backdrop-blur px-5 py-3 text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-4 focus:ring-amber-400 shadow-sm transition"
           />
-          
+
           {/* Search Suggestions Dropdown */}
           {showSuggestions && suggestions && (
-            <div className="absolute top-full left-0 right-0 bg-slate-800 border border-slate-700 rounded-2xl shadow-lg mt-1 z-10 max-h-96 overflow-y-auto">
+            <div className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-2xl shadow-xl mt-2 z-10 max-h-96 overflow-y-auto">
               {/* Popular Search Terms */}
-              <div className="p-3 border-b border-slate-700">
-                <h4 className="text-sm font-semibold text-white mb-2">Popular Searches</h4>
+              <div className="p-3 border-b border-gray-200">
+                <h4 className="text-sm font-semibold text-gray-700 mb-2">Popular Searches</h4>
                 <div className="flex flex-wrap gap-2">
                   {suggestions.popular_terms?.slice(0, 8).map((term, index) => (
                     <button
                       key={index}
                       type="button"
                       onClick={() => handleSuggestionClick(term)}
-                      className="px-3 py-1 bg-slate-700 hover:bg-slate-600 text-gray-200 rounded-full text-sm transition-colors"
+                      className="px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full text-sm transition-colors shadow-sm"
                     >
                       {term}
                     </button>
@@ -71,15 +70,15 @@ export default function SearchBar({ onSearch }) {
               </div>
 
               {/* Categories */}
-              <div className="p-3 border-b border-slate-700">
-                <h4 className="text-sm font-semibold text-white mb-2">Categories</h4>
+              <div className="p-3 border-b border-gray-200">
+                <h4 className="text-sm font-semibold text-gray-700 mb-2">Categories</h4>
                 <div className="flex flex-wrap gap-2">
                   {suggestions.categories?.map((category, index) => (
                     <button
                       key={index}
                       type="button"
                       onClick={() => handleSuggestionClick(category)}
-                      className="px-3 py-1 bg-slate-700 hover:bg-slate-600 text-gray-200 rounded-full text-sm transition-colors"
+                      className="px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full text-sm transition-colors shadow-sm"
                     >
                       {category}
                     </button>
@@ -89,14 +88,14 @@ export default function SearchBar({ onSearch }) {
 
               {/* Example Searches */}
               <div className="p-3">
-                <h4 className="text-sm font-semibold text-white mb-2">Try These</h4>
+                <h4 className="text-sm font-semibold text-gray-700 mb-2">Try These</h4>
                 <div className="flex flex-wrap gap-2">
                   {suggestions.examples?.map((example, index) => (
                     <button
                       key={index}
                       type="button"
                       onClick={() => handleSuggestionClick(example)}
-                      className="px-3 py-1 bg-slate-700 hover:bg-slate-600 text-gray-200 rounded-full text-sm transition-colors"
+                      className="px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full text-sm transition-colors shadow-sm"
                     >
                       {example}
                     </button>
@@ -106,10 +105,10 @@ export default function SearchBar({ onSearch }) {
             </div>
           )}
         </div>
-        
+
         <button
           type="submit"
-          className="rounded-full bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 shadow-md"
+          className="rounded-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white px-6 py-3 shadow-lg font-semibold transition-transform active:scale-95"
         >
           Search
         </button>
