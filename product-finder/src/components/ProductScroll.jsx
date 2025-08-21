@@ -1,255 +1,442 @@
-import { useEffect, useRef, useState, useMemo } from "react";
-import { ShoppingCart, Plus, Eye, Heart, MessageCircle, Share2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown, ShoppingCart, Plus, Eye, Heart, MessageCircle, X, Share2 } from "lucide-react";
 
-// Restored — Instagram-like smooth one-item vertical paging with infinite loop
-export default function ProductScroll({ products = [] }) {
+export default function ProductScroll({ products }) {
   const containerRef = useRef(null);
+  const sectionRefs = useRef([]);
   const [activeIndex, setActiveIndex] = useState(0);
-  const [toast, setToast] = useState("");
+  const segmentSize = products.length;
+  const loopedProducts = segmentSize > 0 ? [...products, ...products, ...products] : [];
+  const isJumpingRef = useRef(false);
+  const debounceTimeoutRef = useRef(null);
 
-  // safety
-  const segmentSize = Math.max(0, products.length);
-  const loopedProducts = segmentSize ? [...products, ...products, ...products] : [];
+  // Likes persisted in localStorage shared with cards
+  const [likedIds, setLikedIds] = useState(new Set());
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("likedProducts");
+      const arr = raw ? JSON.parse(raw) : [];
+      setLikedIds(new Set(arr));
+    } catch {}
+  }, []);
 
-  // consistent seeded counts if product doesn't provide counts
+  // small pop animation on heart icon
+  const [likePopId, setLikePopId] = useState(null);
+  const toggleLike = (id) => {
+    setLikedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+        setLikePopId(id);
+        window.setTimeout(() => {
+          setLikePopId((curr) => (curr === id ? null : curr));
+        }, 300);
+      }
+      try {
+        localStorage.setItem("likedProducts", JSON.stringify(Array.from(next)));
+      } catch {}
+      return next;
+    });
+  };
+
+  // Double-tap like red heart burst (center)
+  const [burstProductId, setBurstProductId] = useState(null);
+  const triggerBurst = (id) => {
+    setBurstProductId(id);
+    window.setTimeout(() => {
+      setBurstProductId((curr) => (curr === id ? null : curr));
+    }, 550);
+  };
+
+  // Touch double-tap detection per IG style
+  const lastTapRef = useRef({ time: 0, id: null });
+  const handleTapLike = (id) => {
+    const now = Date.now();
+    const { time, id: lastId } = lastTapRef.current;
+    if (lastId === id && now - time < 300) {
+      if (!likedIds.has(id)) toggleLike(id);
+      triggerBurst(id);
+    }
+    lastTapRef.current = { time: now, id };
+  };
+
+  // --- NEW: Stable seeded counts (likes & reviews) per product ---
   const seededCounts = useMemo(() => {
     const map = new Map();
     for (const p of products) {
-      const s = String(p.id ?? p.name ?? p.title ?? Math.random());
+      const s = String(p.id ?? p.title ?? "id");
       let h = 0;
-      for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 100000;
-      map.set(p.id, {
-        likes: (p.likes ?? (120 + (h % 880))),
-        reviews: (p.reviews ?? (7 + ((Math.floor(h / 7)) % 193)))
-      });
+      for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 10000;
+      const likes = 120 + (h % 880); // 120–999
+      const reviews = 7 + ((Math.floor(h / 7)) % 193); // 7–199
+      map.set(p.id, { likes, reviews });
     }
     return map;
   }, [products]);
 
-  // set initial scroll to middle segment, and keep it centered on resize
+  // Keyboard navigation (desktop/testing convenience)
   useEffect(() => {
-    const el = containerRef.current;
-    if (!el || segmentSize === 0) return;
-    const setToMiddle = () => {
+    const handleKeyDown = (e) => {
+      if (!containerRef.current) return;
       const vh = window.innerHeight;
-      el.scrollTop = segmentSize * vh;
+      if (e.key === "ArrowDown") {
+        containerRef.current.scrollBy({ top: vh, behavior: "smooth" });
+      }
+      if (e.key === "ArrowUp") {
+        containerRef.current.scrollBy({ top: -vh, behavior: "smooth" });
+      }
     };
-    // small delay to allow layout
-    setTimeout(setToMiddle, 50);
-    window.addEventListener('resize', setToMiddle);
-    return () => window.removeEventListener('resize', setToMiddle);
-  }, [segmentSize]);
 
-  // lightweight scroll updater using rAF (no heavy observers per frame)
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  // --- IMPROVED: Debounced Intersection Observer + snap-stop to avoid skipping ---
   useEffect(() => {
-    const el = containerRef.current;
-    if (!el || segmentSize === 0) return;
-    let ticking = false;
-    const onScroll = () => {
-      if (ticking) return;
-      ticking = true;
-      window.requestAnimationFrame(() => {
-        const vh = window.innerHeight;
-        const physicalIndex = Math.round(el.scrollTop / vh);
-        const normalized = ((physicalIndex % segmentSize) + segmentSize) % segmentSize;
-        setActiveIndex(normalized);
-        ticking = false;
+    const container = containerRef.current;
+    if (!container || segmentSize === 0) return;
+
+    const vh = window.innerHeight;
+
+    // Set initial scroll to the middle segment for infinite loop
+    container.scrollTop = segmentSize * vh;
+
+    const observerCallback = (entries) => {
+      if (isJumpingRef.current) return;
+
+      const intersectingEntry = entries.find((entry) => entry.isIntersecting);
+      if (!intersectingEntry) return;
+
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current);
+      }
+
+      debounceTimeoutRef.current = setTimeout(() => {
+        const newIndex = parseInt(intersectingEntry.target.dataset.index, 10);
+        const normalizedIndex = ((newIndex % segmentSize) + segmentSize) % segmentSize;
+        setActiveIndex(normalizedIndex);
+
+        // Seamless infinite loop: keep user in the middle segment
+        if (newIndex < segmentSize) {
+          isJumpingRef.current = true;
+          container.scrollTo({ top: container.scrollTop + segmentSize * vh, behavior: "auto" });
+          setTimeout(() => {
+            isJumpingRef.current = false;
+          }, 40);
+        } else if (newIndex >= 2 * segmentSize) {
+          isJumpingRef.current = true;
+          container.scrollTo({ top: container.scrollTop - segmentSize * vh, behavior: "auto" });
+          setTimeout(() => {
+            isJumpingRef.current = false;
+          }, 40);
+        }
+      }, 120);
+    };
+
+    const observer = new IntersectionObserver(observerCallback, {
+      root: container,
+      threshold: 0.9, // nearly full item visible to mark as active
+    });
+
+    sectionRefs.current.forEach((ref) => {
+      if (ref) observer.observe(ref);
+    });
+
+    return () => {
+      if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
+      sectionRefs.current.forEach((ref) => {
+        if (ref) observer.unobserve(ref);
       });
     };
-    el.addEventListener('scroll', onScroll, { passive: true });
-    return () => el.removeEventListener('scroll', onScroll);
   }, [segmentSize]);
 
-  // robust touch snapping: ONLY one-step per flick (prevents skipping multiple items)
+  // --- NEW: One-item-per-flick on mobile (hard-stops) ---
   useEffect(() => {
     const el = containerRef.current;
-    if (!el || segmentSize === 0) return;
+    if (!el) return;
 
-    let startScroll = 0;
-    let startTime = 0;
+    let startY = 0;
+    let startTop = 0;
     let moved = false;
+    let startTime = 0;
 
     const onTouchStart = (e) => {
       if (e.touches.length !== 1) return;
-      startScroll = el.scrollTop;
+      startY = e.touches[0].clientY;
+      startTop = el.scrollTop;
       startTime = Date.now();
       moved = false;
     };
 
-    const onTouchMove = () => {
+    const onTouchMove = (e) => {
+      // Allow natural scroll but track movement
       moved = true;
     };
 
-    const normalizeToMiddleIfNeeded = (targetPhysical, targetTop) => {
-      const vh = window.innerHeight;
-      // if user lands in first copy, jump forward by segmentSize
-      if (targetPhysical < segmentSize) {
-        // after smooth snap, jump to middle segment instantly
-        requestAnimationFrame(() => {
-          // small timeout to let smooth scroll settle visually
-          setTimeout(() => {
-            el.scrollTo({ top: targetTop + segmentSize * vh, behavior: 'auto' });
-          }, 80);
-        });
-      } else if (targetPhysical >= 2 * segmentSize) {
-        requestAnimationFrame(() => {
-          setTimeout(() => {
-            el.scrollTo({ top: targetTop - segmentSize * vh, behavior: 'auto' });
-          }, 80);
-        });
-      }
-    };
-
     const onTouchEnd = () => {
-      if (!moved) return; // treat as tap
-      const endScroll = el.scrollTop;
-      const dy = endScroll - startScroll; // positive -> moved up -> next
+      if (!moved) return;
+      const dy = el.scrollTop - startTop; // how far we actually scrolled
       const dt = Math.max(1, Date.now() - startTime);
       const vh = window.innerHeight;
 
-      // threshold to ignore tiny micro-movements; this keeps snaps predictable
-      const threshold = Math.min(0.08 * vh, 48);
-
-      // Determine single-step direction only — prevents multi-skip
+      // Velocity/threshold based decision: exactly one step up/down
+      const threshold = Math.min(0.18 * vh, 120); // ~18% screen or 120px max
       let direction = 0;
-      if (dy > threshold) direction = 1;
-      else if (dy < -threshold) direction = -1;
-      else direction = 0;
+      if (dy > threshold || (dy > 0 && Math.abs(dy) / dt > 0.35)) direction = 1; // next
+      else if (dy < -threshold || (dy < 0 && Math.abs(dy) / dt > 0.35)) direction = -1; // prev
 
-      const startPhysical = Math.round(startScroll / vh);
-      let targetPhysical = startPhysical + direction;
+      // Compute current physical index and target
+      const currentPhysicalIndex = Math.round(el.scrollTop / vh);
+      let targetPhysicalIndex = currentPhysicalIndex + direction;
 
-      // clamp to allowed range of physical indexes (0 .. loopedProducts.length-1)
-      targetPhysical = Math.max(0, Math.min(targetPhysical, loopedProducts.length - 1));
-
-      const targetTop = targetPhysical * vh;
-
-      // Smooth snap to the computed single-target position
-      el.scrollTo({ top: targetTop, behavior: 'smooth' });
-
-      // After smooth scroll finishes (visually), normalize to middle segment if needed
-      normalizeToMiddleIfNeeded(targetPhysical, targetTop);
+      // Snap to exact screen boundaries to avoid drift
+      const targetTop = targetPhysicalIndex * vh;
+      el.scrollTo({ top: targetTop, behavior: "smooth" });
     };
 
-    el.addEventListener('touchstart', onTouchStart, { passive: true });
-    el.addEventListener('touchmove', onTouchMove, { passive: true });
-    el.addEventListener('touchend', onTouchEnd, { passive: true });
+    el.addEventListener("touchstart", onTouchStart, { passive: true });
+    el.addEventListener("touchmove", onTouchMove, { passive: true });
+    el.addEventListener("touchend", onTouchEnd, { passive: true });
 
     return () => {
-      el.removeEventListener('touchstart', onTouchStart);
-      el.removeEventListener('touchmove', onTouchMove);
-      el.removeEventListener('touchend', onTouchEnd);
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove", onTouchMove);
+      el.removeEventListener("touchend", onTouchEnd);
     };
-  }, [segmentSize, loopedProducts.length]);
+  }, []);
 
-  // share / copy handler
-  const handleShare = async (product) => {
+  // --- Reviews Drawer ---
+  const [reviewsOpenFor, setReviewsOpenFor] = useState(null);
+  useEffect(() => {
+    if (!reviewsOpenFor) return;
+    const onEsc = (e) => e.key === "Escape" && setReviewsOpenFor(null);
+    window.addEventListener("keydown", onEsc);
+    return () => window.removeEventListener("keydown", onEsc);
+  }, [reviewsOpenFor]);
+
+  // simple mock reviews (replace with backend later)
+  const mockReviews = [
+    { user: "Aditi", rating: 5, text: "Great quality, totally worth it!" },
+    { user: "Rohit", rating: 4, text: "Looks premium, delivery was fast." },
+    { user: "Maya", rating: 4, text: "Exactly as shown. Good value." },
+  ];
+
+  // --- NEW: Share handler + tiny toast ---
+  const [toast, setToast] = useState("");
+  const shareProduct = async (p) => {
+    const url = (p.url || window.location.href) + `#product-${p.id}`;
     try {
-      const url = (product.url || window.location.href) + `#product-${product.id}`;
-      if (navigator.share) await navigator.share({ title: product.name || product.title || '', text: product.description || '', url });
-      else if (navigator.clipboard) {
+      if (navigator.share) {
+        await navigator.share({ title: p.title, text: p.title, url });
+      } else if (navigator.clipboard) {
         await navigator.clipboard.writeText(url);
-        setToast('Link copied to clipboard!');
-        setTimeout(() => setToast(''), 1800);
+        setToast("Link copied to clipboard");
+        setTimeout(() => setToast(""), 1500);
       }
-    } catch (err) {
-      console.error('share failed', err);
+    } catch {
+      /* user cancelled or unsupported */
     }
   };
 
-  // simple rendered UI — restored original layout intent:
-  // - image uses object-contain with h-[80vh] so bottom action row is always visible
-  // - right rail sits above that bottom actions using an explicit offset
-  const ACTION_ROW_H = 96; // px — adjust if you change bottom actions
-
-  if (segmentSize === 0) {
+  if (products.length === 0) {
     return (
       <div className="flex items-center justify-center h-screen text-gray-400">No products found.</div>
     );
   }
 
   return (
-    <div className="relative h-screen w-full overflow-hidden bg-black">
-      {/* Scroll container: CSS snap + stop to prefer JS snapping for reliability */}
-      <div
-        ref={containerRef}
-        className="h-full w-full overflow-y-scroll snap-y snap-mandatory scrollbar-hide"
-        style={{ WebkitOverflowScrolling: 'touch' }}
-      >
-        {loopedProducts.map((product, i) => {
-          const counts = seededCounts.get(product.id) || { likes: 0, reviews: 0 };
-          return (
-            <section key={i} className="relative h-screen w-full snap-start flex-shrink-0 overflow-hidden">
-              {/* image takes 80vh so bottom area reserved for actions */}
-              <img
-                src={product.image || product.thumbnail}
-                alt={product.name || product.title}
-                onError={(e) => (e.currentTarget.src = 'https://via.placeholder.com/1200x1600/0B1220/FFFFFF?text=No+Image')}
-                className="mx-auto block object-contain h-[80vh] max-h-full max-w-full"
-              />
+    <div
+      ref={containerRef}
+      className="relative h-screen w-full overflow-y-scroll snap-y snap-mandatory overscroll-contain touch-pan-y scrollbar-hide bg-black"
+    >
+      {/* Local styles for IG-like heart animations */}
+      <style>{`
+        @keyframes like-pop { 0% { transform: scale(0.9); } 45% { transform: scale(1.25); } 100% { transform: scale(1); } }
+        .like-pop { animation: like-pop 280ms ease-out; }
+        @keyframes heart-burst { 0% { transform: scale(0.8); opacity: 0; } 20% { opacity: 1; } 100% { transform: scale(1.4); opacity: 0; } }
+        .heart-burst { animation: heart-burst 550ms ease-out forwards; }
+      `}</style>
 
-              {/* gradient for readability */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent pointer-events-none" />
+      {loopedProducts.map((p, i) => {
+        const { likes = 0, reviews = 0 } = seededCounts.get(p.id) || {};
+        const displayLikes = likes + (likedIds.has(p.id) ? 1 : 0);
 
-              {/* right-side action rail aligned above bottom actions */}
-              <div className="absolute right-3 flex flex-col items-center gap-4 z-30" style={{ bottom: `${ACTION_ROW_H + 20}px` }}>
-                <div className="flex flex-col items-center">
-                  <button className="bg-white/10 p-3 rounded-full text-white" aria-label="like">
-                    <Heart className="h-6 w-6" />
-                  </button>
-                  <span className="text-xs text-white mt-1">{(product.likes ?? counts.likes).toLocaleString()}</span>
+        return (
+          <section
+            key={i}
+            data-index={i}
+            ref={(el) => (sectionRefs.current[i] = el)}
+            className="relative h-screen w-full snap-start snap-always flex items-center justify-center bg-black"
+            onDoubleClick={() => {
+              const id = p.id;
+              if (!likedIds.has(id)) toggleLike(id);
+              triggerBurst(id);
+            }}
+            onTouchEnd={() => handleTapLike(p.id)}
+          >
+            {/* Product image centered */}
+            <img
+              src={p.thumbnail}
+              alt={p.title}
+              onError={(e) => (e.currentTarget.src = "https://via.placeholder.com/1200x1600/0B1220/FFFFFF?text=No+Image")}
+              className={`object-contain max-h-full max-w-full h-[80vh] transition-opacity duration-700 ${
+                activeIndex === ((i % segmentSize) + segmentSize) % segmentSize ? "opacity-100" : "opacity-70"
+              }`}
+            />
+
+            {/* IG-style red heart burst (center) */}
+            {burstProductId === p.id && (
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center z-10">
+                <Heart className="h-28 w-28 text-red-500 fill-red-500 heart-burst drop-shadow-[0_0_12px_rgba(239,68,68,0.6)]" />
+              </div>
+            )}
+
+            {/* IG-style action rail on the right */}
+            <div className="absolute right-4 top-1/2 -translate-y-1/2 flex flex-col items-center gap-3 sm:gap-4 z-30">
+              {/* Like button */}
+              <button
+                type="button"
+                aria-label="Like product"
+                aria-pressed={likedIds.has(p.id)}
+                onClick={() => {
+                  if (!likedIds.has(p.id)) triggerBurst(p.id);
+                  toggleLike(p.id);
+                }}
+                className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-black/30 hover:bg-black/50 backdrop-blur-sm text-white shadow-lg transition-colors"
+              >
+                <Heart
+                  className={`h-8 w-8 transition-all ${likedIds.has(p.id) ? "fill-red-500 text-red-500" : "text-white"} ${
+                    likePopId === p.id ? "like-pop" : ""
+                  }`}
+                />
+              </button>
+              <span className="text-[11px] leading-none text-white/90">{displayLikes.toLocaleString()}</span>
+
+              {/* Reviews button */}
+              <button
+                type="button"
+                aria-label="Open reviews"
+                onClick={() => setReviewsOpenFor(p.id)}
+                className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-black/30 hover:bg-black/50 backdrop-blur-sm text-white shadow-lg transition-colors"
+              >
+                <MessageCircle className="h-8 w-8" />
+              </button>
+              <span className="text-[11px] leading-none text-white/90">{reviews.toLocaleString()}</span>
+
+              {/* NEW: Share button */}
+              <button
+                type="button"
+                aria-label="Share product"
+                onClick={() => shareProduct(p)}
+                className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-black/30 hover:bg-black/50 backdrop-blur-sm text-white shadow-lg transition-colors"
+              >
+                <Share2 className="h-8 w-8" />
+              </button>
+            </div>
+
+            {/* Overlay gradient at bottom */}
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-64 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+
+            {/* Text overlay bottom */}
+            <div className="absolute inset-x-0 bottom-0 z-10">
+              <div className="text-white px-4 pb-8 md:px-8">
+                <h2 className="text-2xl sm:text-3xl md:text-4xl font-semibold leading-snug line-clamp-2">{p.title}</h2>
+                {p.category && <p className="mt-1 text-sm text-gray-300 capitalize">{p.category}</p>}
+                <div className="mt-4 flex items-end gap-4">
+                  <p className="text-amber-400 font-bold text-3xl">${p.price?.toFixed(2) || "N/A"}</p>
+                  <span className="text-xs text-gray-400">incl. taxes</span>
                 </div>
-                <div className="flex flex-col items-center">
-                  <button className="bg-white/10 p-3 rounded-full text-white" aria-label="reviews">
-                    <MessageCircle className="h-6 w-6" />
+
+                {/* BIGGER mobile buttons */}
+                <div className="mt-6 flex flex-nowrap items-center gap-2 sm:gap-3">
+                  <button className="inline-flex flex-1 sm:flex-none items-center justify-center gap-2 px-5 py-3 sm:px-5 sm:py-2.5 rounded-full bg-amber-500 hover:bg-amber-600 text-white text-sm sm:text-sm font-medium shadow-md min-h-[50px]">
+                    <ShoppingCart className="h-6 w-6 sm:h-5 sm:w-5" />
+                    <span className="hidden sm:inline">Buy Now</span>
                   </button>
-                  <span className="text-xs text-white mt-1">{(product.reviews ?? counts.reviews).toLocaleString()}</span>
-                </div>
-                <div className="flex flex-col items-center">
-                  <button className="bg-white/10 p-3 rounded-full text-white" aria-label="share" onClick={() => handleShare(product)}>
-                    <Share2 className="h-6 w-6" />
+                  <button className="inline-flex items-center justify-center gap-2 px-5 py-3 sm:px-5 sm:py-2.5 rounded-full bg-slate-700 hover:bg-slate-600 text-gray-200 text-sm sm:text-sm shadow-md min-h-[50px]">
+                    <Plus className="h-6 w-6 sm:h-5 sm:w-5" />
+                    <span className="hidden sm:inline">Add to Cart</span>
+                  </button>
+                  <button className="inline-flex items-center justify-center gap-2 px-5 py-3 sm:px-5 sm:py-2.5 rounded-full bg-slate-700 hover:bg-slate-600 text-gray-200 text-sm sm:text-sm shadow-md min-h-[50px]">
+                    <Eye className="h-6 w-6 sm:h-5 sm:w-5" />
+                    <span className="hidden sm:inline">View Details</span>
                   </button>
                 </div>
               </div>
+            </div>
+          </section>
+        );
+      })}
 
-              {/* bottom action area — restored to be visible and tappable */}
-              <div className="absolute left-4 right-4 bottom-4 z-20">
-                <div className="text-white">
-                  <h2 className="text-2xl font-semibold">{product.name}</h2>
-                  <p className="text-sm text-gray-300 line-clamp-2 mt-1">{product.description}</p>
-                  <div className="mt-3 flex items-center justify-between">
-                    <div>
-                      <div className="text-amber-400 font-bold text-2xl">${(product.price ?? 0).toFixed(2)}</div>
-                      <div className="text-xs text-gray-400">incl. taxes</div>
-                    </div>
+      {/* Scroll hint */}
+      {activeIndex === 0 && (
+        <div className="pointer-events-none absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center text-white/80">
+          <span className="text-xs mb-1">Scroll</span>
+          <ChevronDown className="h-5 w-5 animate-bounce" />
+        </div>
+      )}
 
-                    <div className="flex items-center gap-2">
-                      <button className="bg-white text-black rounded-full px-4 py-2 flex items-center gap-2 shadow-lg">
-                        <ShoppingCart className="h-5 w-5" />
-                        <span>Add</span>
-                      </button>
-                      <button className="bg-amber-500 text-white rounded-full px-4 py-2 flex items-center gap-2 shadow-lg">
-                        <Plus className="h-5 w-5" />
-                        <span>Buy</span>
-                      </button>
-                      <button className="bg-white/10 text-white rounded-full px-4 py-2 flex items-center gap-2 shadow-lg">
-                        <Eye className="h-5 w-5" />
-                        <span>View</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </section>
-          );
-        })}
-      </div>
-
-      {/* toast */}
+      {/* Tiny toast for share fallback */}
       {toast && (
-        <div className="absolute bottom-28 left-1/2 -translate-x-1/2 bg-black/80 text-white text-sm px-4 py-2 rounded-full shadow-lg">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-black/80 text-white text-sm px-3 py-2 rounded-full shadow-lg">
           {toast}
         </div>
+      )}
+
+      {/* Reviews Drawer (bottom sheet) */}
+      {reviewsOpenFor && (
+        <>
+          {/* Dim background */}
+          <div className="fixed inset-0 bg-black/60 z-40" onClick={() => setReviewsOpenFor(null)} />
+          {/* Sheet */}
+          <div className="fixed inset-x-0 bottom-0 z-50 bg-slate-900 border-t border-slate-700 rounded-t-2xl max-h-[70vh] overflow-y-auto shadow-2xl">
+            <div className="sticky top-0 bg-slate-900/95 backdrop-blur-sm p-4 border-b border-slate-800 rounded-t-2xl flex items-center justify-between">
+              <div className="h-1.5 w-12 bg-slate-700 rounded-full mx-auto absolute left-1/2 -translate-x-1/2 -mt-3" />
+              <h3 className="text-gray-100 font-semibold">Reviews</h3>
+              <button
+                onClick={() => setReviewsOpenFor(null)}
+                className="p-1 rounded-full hover:bg-slate-800 text-gray-300"
+                aria-label="Close reviews"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-4">
+              <ul className="space-y-4">
+                {mockReviews.map((r, idx) => (
+                  <li key={idx} className="flex gap-3">
+                    <div className="h-9 w-9 rounded-full bg-slate-700 flex items-center justify-center text-xs text-gray-200">
+                      {r.user.slice(0, 2).toUpperCase()}
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-gray-200 font-medium">{r.user}</span>
+                        <span className="text-amber-400 text-xs">
+                          {"★".repeat(r.rating)} <span className="text-slate-500">{"★".repeat(5 - r.rating)}</span>
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-300 mt-1">{r.text}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              {/* Placeholder input (UI only) */}
+              <div className="mt-4 border-t border-slate-800 pt-4">
+                <div className="flex gap-2">
+                  <input
+                    disabled
+                    placeholder="Write a review (mock UI)…"
+                    className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-gray-200 placeholder-gray-500"
+                  />
+                  <button className="px-3 py-2 rounded-xl bg-amber-500 text-white text-sm opacity-60 cursor-not-allowed">Send</button>
+                </div>
+                <p className="text-[11px] text-slate-500 mt-2">Hook this to your backend later to submit & fetch real reviews.</p>
+              </div>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );
