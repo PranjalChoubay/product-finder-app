@@ -1,37 +1,75 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ShoppingCart, Plus, Eye, Heart, MessageCircle, X, Share2 } from "lucide-react";
+import { useEffect, useRef, useState, useMemo } from "react";
+import {
+  ChevronDown,
+  ShoppingCart,
+  Plus,
+  Eye,
+  Heart,
+  MessageCircle,
+  X,
+  Share2,
+} from "lucide-react";
 
-export default function ProductScroll({ products }) {
+/**
+ * ProductScroll.jsx
+ * - IG-like single-item vertical paging on mobile
+ * - Right-side action rail aligned above bottom action row
+ * - Stable seeded likes/reviews shown under icons
+ * - Share button added
+ * - Bigger bottom action buttons for mobile
+ *
+ * Notes:
+ * - Expects `products` array of objects with { id, title, thumbnail, price, category, url? }
+ * - Keep images reasonably sized server-side for best performance
+ */
+
+export default function ProductScroll({ products = [] }) {
+  const ACTION_ROW_H = 78; // px - height of bottom action container (used to position right rail)
   const containerRef = useRef(null);
   const sectionRefs = useRef([]);
-  const [activeIndex, setActiveIndex] = useState(0);
-  const segmentSize = products.length;
-  const loopedProducts = segmentSize > 0 ? [...products, ...products, ...products] : [];
-  const isJumpingRef = useRef(false);
-  const debounceTimeoutRef = useRef(null);
-
-  // Likes persisted in localStorage shared with cards
+  const [activeIndex, setActiveIndex] = useState(0); // normalized index 0..segmentSize-1
   const [likedIds, setLikedIds] = useState(new Set());
+  const [likePopId, setLikePopId] = useState(null);
+  const [burstProductId, setBurstProductId] = useState(null);
+  const [reviewsOpenFor, setReviewsOpenFor] = useState(null);
+  const [toast, setToast] = useState("");
+  const segmentSize = products.length;
+  const loopedProducts = segmentSize ? [...products, ...products, ...products] : [];
+
+  // stable seeded counts so numbers look realistic and deterministic
+  const seededCounts = useMemo(() => {
+    const map = new Map();
+    for (const p of products) {
+      const s = String(p.id ?? p.title ?? Math.random());
+      let h = 0;
+      for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 100000;
+      const likes = 120 + (h % 880); // 120..999
+      const reviews = 7 + ((Math.floor(h / 7)) % 193); // 7..199
+      map.set(p.id, { likes, reviews });
+    }
+    return map;
+  }, [products]);
+
+  // load liked ids from localStorage
   useEffect(() => {
     try {
       const raw = localStorage.getItem("likedProducts");
       const arr = raw ? JSON.parse(raw) : [];
       setLikedIds(new Set(arr));
-    } catch {}
+    } catch {
+      setLikedIds(new Set());
+    }
   }, []);
 
-  // small pop animation on heart icon
-  const [likePopId, setLikePopId] = useState(null);
   const toggleLike = (id) => {
     setLikedIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
+      if (next.has(id)) next.delete(id);
+      else {
         next.add(id);
         setLikePopId(id);
-        window.setTimeout(() => {
-          setLikePopId((curr) => (curr === id ? null : curr));
+        setTimeout(() => {
+          setLikePopId((cur) => (cur === id ? null : cur));
         }, 300);
       }
       try {
@@ -41,16 +79,14 @@ export default function ProductScroll({ products }) {
     });
   };
 
-  // Double-tap like red heart burst (center)
-  const [burstProductId, setBurstProductId] = useState(null);
   const triggerBurst = (id) => {
     setBurstProductId(id);
-    window.setTimeout(() => {
+    setTimeout(() => {
       setBurstProductId((curr) => (curr === id ? null : curr));
     }, 550);
   };
 
-  // Touch double-tap detection per IG style
+  // double-tap detection on touch (IG-style)
   const lastTapRef = useRef({ time: 0, id: null });
   const handleTapLike = (id) => {
     const now = Date.now();
@@ -62,138 +98,137 @@ export default function ProductScroll({ products }) {
     lastTapRef.current = { time: now, id };
   };
 
-  // --- NEW: Stable seeded counts (likes & reviews) per product ---
-  const seededCounts = useMemo(() => {
-    const map = new Map();
-    for (const p of products) {
-      const s = String(p.id ?? p.title ?? "id");
-      let h = 0;
-      for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 10000;
-      const likes = 120 + (h % 880); // 120–999
-      const reviews = 7 + ((Math.floor(h / 7)) % 193); // 7–199
-      map.set(p.id, { likes, reviews });
-    }
-    return map;
-  }, [products]);
-
-  // Keyboard navigation (desktop/testing convenience)
+  // keyboard navigation for desktop/dev
   useEffect(() => {
-    const handleKeyDown = (e) => {
+    const handler = (e) => {
       if (!containerRef.current) return;
       const vh = window.innerHeight;
-      if (e.key === "ArrowDown") {
-        containerRef.current.scrollBy({ top: vh, behavior: "smooth" });
-      }
-      if (e.key === "ArrowUp") {
-        containerRef.current.scrollBy({ top: -vh, behavior: "smooth" });
-      }
+      if (e.key === "ArrowDown") containerRef.current.scrollBy({ top: vh, behavior: "smooth" });
+      if (e.key === "ArrowUp") containerRef.current.scrollBy({ top: -vh, behavior: "smooth" });
     };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
   }, []);
 
-  // --- IMPROVED: Debounced Intersection Observer + snap-stop to avoid skipping ---
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container || segmentSize === 0) return;
-
-    const vh = window.innerHeight;
-
-    // Set initial scroll to the middle segment for infinite loop
-    container.scrollTop = segmentSize * vh;
-
-    const observerCallback = (entries) => {
-      if (isJumpingRef.current) return;
-
-      const intersectingEntry = entries.find((entry) => entry.isIntersecting);
-      if (!intersectingEntry) return;
-
-      if (debounceTimeoutRef.current) {
-        clearTimeout(debounceTimeoutRef.current);
+  // Share handler with Web Share API fallback to clipboard
+  const shareProduct = async (p) => {
+    const url = (p.url || window.location.href) + `#product-${p.id}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: p.title, text: p.title, url });
+      } else if (navigator.clipboard) {
+        await navigator.clipboard.writeText(url);
+        setToast("Link copied to clipboard");
+        setTimeout(() => setToast(""), 1400);
       }
+    } catch {
+      // ignore share cancel/errors
+    }
+  };
 
-      debounceTimeoutRef.current = setTimeout(() => {
-        const newIndex = parseInt(intersectingEntry.target.dataset.index, 10);
-        const normalizedIndex = ((newIndex % segmentSize) + segmentSize) % segmentSize;
-        setActiveIndex(normalizedIndex);
-
-        // Seamless infinite loop: keep user in the middle segment
-        if (newIndex < segmentSize) {
-          isJumpingRef.current = true;
-          container.scrollTo({ top: container.scrollTop + segmentSize * vh, behavior: "auto" });
-          setTimeout(() => {
-            isJumpingRef.current = false;
-          }, 40);
-        } else if (newIndex >= 2 * segmentSize) {
-          isJumpingRef.current = true;
-          container.scrollTo({ top: container.scrollTop - segmentSize * vh, behavior: "auto" });
-          setTimeout(() => {
-            isJumpingRef.current = false;
-          }, 40);
-        }
-      }, 120);
-    };
-
-    const observer = new IntersectionObserver(observerCallback, {
-      root: container,
-      threshold: 0.9, // nearly full item visible to mark as active
-    });
-
-    sectionRefs.current.forEach((ref) => {
-      if (ref) observer.observe(ref);
-    });
-
-    return () => {
-      if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
-      sectionRefs.current.forEach((ref) => {
-        if (ref) observer.unobserve(ref);
-      });
-    };
-  }, [segmentSize]);
-
-  // --- NEW: One-item-per-flick on mobile (hard-stops) ---
+  // --- Setup initial scroll (to middle segment) once on mount & when screen size changes ---
   useEffect(() => {
     const el = containerRef.current;
-    if (!el) return;
+    if (!el || segmentSize === 0) return;
+    // ensure this runs after layout
+    const setStart = () => {
+      const vh = window.innerHeight;
+      el.scrollTop = segmentSize * vh;
+    };
+    setStart();
+    // if orientation/size changes, reset to center again
+    window.addEventListener("resize", setStart);
+    return () => window.removeEventListener("resize", setStart);
+  }, [segmentSize]);
+
+  // --- Smooth, low-cost scroll handler: update active index via rAF only ---
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || segmentSize === 0) return;
+    let ticking = false;
+    const onScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      window.requestAnimationFrame(() => {
+        const vh = window.innerHeight;
+        const physical = Math.round(el.scrollTop / vh);
+        // map physical (0..3*segmentSize-1) -> normalized
+        const normalized = ((physical % segmentSize) + segmentSize) % segmentSize;
+        setActiveIndex(normalized);
+        ticking = false;
+      });
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, [segmentSize]);
+
+  // --- Mobile-only: single-item-per-flick logic and re-centering to middle segment ---
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || segmentSize === 0) return;
 
     let startY = 0;
-    let startTop = 0;
-    let moved = false;
+    let startScroll = 0;
     let startTime = 0;
+    let moved = false;
 
     const onTouchStart = (e) => {
       if (e.touches.length !== 1) return;
       startY = e.touches[0].clientY;
-      startTop = el.scrollTop;
+      startScroll = el.scrollTop;
       startTime = Date.now();
       moved = false;
     };
 
-    const onTouchMove = (e) => {
-      // Allow natural scroll but track movement
+    const onTouchMove = () => {
       moved = true;
     };
 
+    const snapToPhysical = (targetPhysical) => {
+      const vh = window.innerHeight;
+      const targetTop = targetPhysical * vh;
+      el.scrollTo({ top: targetTop, behavior: "smooth" });
+
+      // watch for scroll settle, then normalize to middle segment instantly
+      const settleCheck = () => {
+        // when smooth scroll is close to target, jump to middle segment if needed
+        if (Math.abs(el.scrollTop - targetTop) < 2 || Math.abs(el.scrollTop - targetTop) / vh < 0.01) {
+          // normalize: if target is in first segment (0..segmentSize-1) -> shift +segmentSize
+          // if in third (2*segmentSize .. ) -> shift -segmentSize
+          if (targetPhysical < segmentSize) {
+            el.scrollTo({ top: targetTop + segmentSize * vh, behavior: "auto" });
+          } else if (targetPhysical >= 2 * segmentSize) {
+            el.scrollTo({ top: targetTop - segmentSize * vh, behavior: "auto" });
+          }
+          return;
+        }
+        requestAnimationFrame(settleCheck);
+      };
+      requestAnimationFrame(settleCheck);
+    };
+
     const onTouchEnd = () => {
-      if (!moved) return;
-      const dy = el.scrollTop - startTop; // how far we actually scrolled
+      if (!moved) return; // it was a tap
+      const dy = el.scrollTop - startScroll; // positive -> user moved content up => go to next
       const dt = Math.max(1, Date.now() - startTime);
       const vh = window.innerHeight;
 
-      // Velocity/threshold based decision: exactly one step up/down
-      const threshold = Math.min(0.18 * vh, 120); // ~18% screen or 120px max
+      // Strong rule: go exactly one item per flick, ignoring how hard the user flicked.
+      // Direction derived purely from dy sign (and a tiny threshold to ignore micro-movements)
+      const threshold = Math.min(0.05 * vh, 36); // ignore micro-movements
       let direction = 0;
-      if (dy > threshold || (dy > 0 && Math.abs(dy) / dt > 0.35)) direction = 1; // next
-      else if (dy < -threshold || (dy < 0 && Math.abs(dy) / dt > 0.35)) direction = -1; // prev
+      if (dy > threshold) direction = 1;
+      else if (dy < -threshold) direction = -1;
+      else direction = 0; // if negligible, snap back to nearest
 
-      // Compute current physical index and target
-      const currentPhysicalIndex = Math.round(el.scrollTop / vh);
-      let targetPhysicalIndex = currentPhysicalIndex + direction;
+      const currentPhysical = Math.round(startScroll / vh);
+      let targetPhysical = currentPhysical + direction;
 
-      // Snap to exact screen boundaries to avoid drift
-      const targetTop = targetPhysicalIndex * vh;
-      el.scrollTo({ top: targetTop, behavior: "smooth" });
+      // clamp but we have looping so allow values 0 .. 3*segmentSize-1
+      if (targetPhysical < 0) targetPhysical = 0;
+      if (targetPhysical >= loopedProducts.length) targetPhysical = loopedProducts.length - 1;
+
+      snapToPhysical(targetPhysical);
     };
 
     el.addEventListener("touchstart", onTouchStart, { passive: true });
@@ -205,10 +240,9 @@ export default function ProductScroll({ products }) {
       el.removeEventListener("touchmove", onTouchMove);
       el.removeEventListener("touchend", onTouchEnd);
     };
-  }, []);
+  }, [segmentSize, loopedProducts.length]);
 
-  // --- Reviews Drawer ---
-  const [reviewsOpenFor, setReviewsOpenFor] = useState(null);
+  // Reviews escape key
   useEffect(() => {
     if (!reviewsOpenFor) return;
     const onEsc = (e) => e.key === "Escape" && setReviewsOpenFor(null);
@@ -216,88 +250,111 @@ export default function ProductScroll({ products }) {
     return () => window.removeEventListener("keydown", onEsc);
   }, [reviewsOpenFor]);
 
-  // simple mock reviews (replace with backend later)
-  const mockReviews = [
-    { user: "Aditi", rating: 5, text: "Great quality, totally worth it!" },
-    { user: "Rohit", rating: 4, text: "Looks premium, delivery was fast." },
-    { user: "Maya", rating: 4, text: "Exactly as shown. Good value." },
-  ];
-
-  // --- NEW: Share handler + tiny toast ---
-  const [toast, setToast] = useState("");
-  const shareProduct = async (p) => {
-    const url = (p.url || window.location.href) + `#product-${p.id}`;
-    try {
-      if (navigator.share) {
-        await navigator.share({ title: p.title, text: p.title, url });
-      } else if (navigator.clipboard) {
-        await navigator.clipboard.writeText(url);
-        setToast("Link copied to clipboard");
-        setTimeout(() => setToast(""), 1500);
-      }
-    } catch {
-      /* user cancelled or unsupported */
-    }
-  };
-
-  if (products.length === 0) {
+  if (segmentSize === 0) {
     return (
-      <div className="flex items-center justify-center h-screen text-gray-400">No products found.</div>
+      <div className="flex items-center justify-center h-screen text-gray-400">
+        No products found.
+      </div>
     );
   }
 
   return (
     <div
       ref={containerRef}
-      className="relative h-screen w-full overflow-y-scroll snap-y snap-mandatory overscroll-contain touch-pan-y scrollbar-hide bg-black"
+      // inject CSS variable for action-row height so rail can align
+      style={{ ["--action-row-h"]: `${ACTION_ROW_H}px` }}
+      className="relative h-screen w-full overflow-y-auto touch-pan-y scrollbar-hide bg-black snap-y snap-mandatory scroll-smooth -webkit-overflow-scrolling-touch"
     >
-      {/* Local styles for IG-like heart animations */}
+      {/* local animations & small utility styles */}
       <style>{`
-        @keyframes like-pop { 0% { transform: scale(0.9); } 45% { transform: scale(1.25); } 100% { transform: scale(1); } }
+        /* animations */
+        @keyframes like-pop {
+          0% { transform: scale(0.88); }
+          45% { transform: scale(1.18); }
+          100% { transform: scale(1); }
+        }
         .like-pop { animation: like-pop 280ms ease-out; }
-        @keyframes heart-burst { 0% { transform: scale(0.8); opacity: 0; } 20% { opacity: 1; } 100% { transform: scale(1.4); opacity: 0; } }
+
+        @keyframes heart-burst {
+          0% { transform: scale(0.8); opacity: 0; }
+          20% { opacity: 1; }
+          100% { transform: scale(1.4); opacity: 0; }
+        }
         .heart-burst { animation: heart-burst 550ms ease-out forwards; }
+
+        /* ensure each section is a strict page */
+        .snap-start { scroll-snap-align: start; scroll-snap-stop: always; }
       `}</style>
 
+      {/* left progress indicator - subtle */}
+      <div className="fixed left-3 top-1/2 -translate-y-1/2 h-3/5 z-40 flex items-center">
+        <div className="w-1.5 h-full rounded-full bg-slate-700 relative overflow-hidden">
+          <div
+            className="absolute left-0 top-0 w-full bg-amber-400 rounded-full transition-transform"
+            style={{
+              height: `${Math.max(6, (activeIndex / Math.max(1, segmentSize - 1)) * 100)}%`,
+              transformOrigin: "top",
+            }}
+          />
+        </div>
+      </div>
+
       {loopedProducts.map((p, i) => {
-        const { likes = 0, reviews = 0 } = seededCounts.get(p.id) || {};
-        const displayLikes = likes + (likedIds.has(p.id) ? 1 : 0);
+        const normalized = ((i % segmentSize) + segmentSize) % segmentSize;
+        const isActive = normalized === activeIndex;
+        const counts = seededCounts.get(p.id) || { likes: 0, reviews: 0 };
+        const displayLikes = counts.likes + (likedIds.has(p.id) ? 1 : 0);
+
+        // Pull some image loading priority: center segment (middle) gets higher fetch priority
+        const centerSegmentStart = segmentSize;
+        const isCenterPhysical = i >= centerSegmentStart && i < centerSegmentStart + segmentSize && normalized === activeIndex;
 
         return (
           <section
-            key={i}
+            key={`${p.id}-${i}`}
             data-index={i}
             ref={(el) => (sectionRefs.current[i] = el)}
-            className="relative h-screen w-full snap-start snap-always flex items-center justify-center bg-black"
+            className="relative h-screen w-full snap-start flex items-center justify-center bg-black"
             onDoubleClick={() => {
               const id = p.id;
               if (!likedIds.has(id)) toggleLike(id);
               triggerBurst(id);
             }}
             onTouchEnd={() => handleTapLike(p.id)}
+            aria-hidden={false}
           >
-            {/* Product image centered */}
+            {/* Parallax + subtle scale on active item */}
             <img
               src={p.thumbnail}
               alt={p.title}
+              decoding="async"
+              loading="lazy"
+              fetchpriority={isCenterPhysical ? "high" : "auto"}
               onError={(e) => (e.currentTarget.src = "https://via.placeholder.com/1200x1600/0B1220/FFFFFF?text=No+Image")}
-              className={`object-contain max-h-full max-w-full h-[80vh] transition-opacity duration-700 ${
-                activeIndex === ((i % segmentSize) + segmentSize) % segmentSize ? "opacity-100" : "opacity-70"
+              className={`object-contain max-h-full max-w-full h-[80vh] transition-transform duration-400 ease-out will-change-transform ${
+                isActive ? "scale-100" : "scale-[0.985] opacity-80"
               }`}
+              style={{
+                transform: isActive ? "scale(1)" : "scale(.985)",
+                transition: "transform 420ms cubic-bezier(.2,.9,.2,1), opacity 300ms",
+                willChange: "transform, opacity",
+              }}
             />
 
-            {/* IG-style red heart burst (center) */}
+            {/* Center burst animation */}
             {burstProductId === p.id && (
-              <div className="pointer-events-none absolute inset-0 flex items-center justify-center z-10">
-                <Heart className="h-28 w-28 text-red-500 fill-red-500 heart-burst drop-shadow-[0_0_12px_rgba(239,68,68,0.6)]" />
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center z-30">
+                <Heart className="h-28 w-28 text-red-500 fill-red-500 heart-burst drop-shadow-[0_0_18px_rgba(239,68,68,0.6)]" />
               </div>
             )}
 
-            {/* IG-style action rail on the right */}
-            <div className="absolute right-4 top-1/2 -translate-y-1/2 flex flex-col items-center gap-3 sm:gap-4 z-30">
-              {/* Like button */}
+            {/* Right-side action rail: aligned above bottom action row using CSS var */}
+            <div
+              className="absolute right-4 z-30 flex flex-col items-center gap-3"
+              style={{ bottom: `calc(var(--action-row-h) + 18px)` }}
+            >
+              {/* Like */}
               <button
-                type="button"
                 aria-label="Like product"
                 aria-pressed={likedIds.has(p.id)}
                 onClick={() => {
@@ -312,22 +369,20 @@ export default function ProductScroll({ products }) {
                   }`}
                 />
               </button>
-              <span className="text-[11px] leading-none text-white/90">{displayLikes.toLocaleString()}</span>
+              <span className="text-[12px] leading-none text-white/90">{displayLikes.toLocaleString()}</span>
 
-              {/* Reviews button */}
+              {/* Reviews */}
               <button
-                type="button"
                 aria-label="Open reviews"
                 onClick={() => setReviewsOpenFor(p.id)}
                 className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-black/30 hover:bg-black/50 backdrop-blur-sm text-white shadow-lg transition-colors"
               >
                 <MessageCircle className="h-8 w-8" />
               </button>
-              <span className="text-[11px] leading-none text-white/90">{reviews.toLocaleString()}</span>
+              <span className="text-[12px] leading-none text-white/90">{counts.reviews.toLocaleString()}</span>
 
-              {/* NEW: Share button */}
+              {/* Share */}
               <button
-                type="button"
                 aria-label="Share product"
                 onClick={() => shareProduct(p)}
                 className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-black/30 hover:bg-black/50 backdrop-blur-sm text-white shadow-lg transition-colors"
@@ -336,32 +391,51 @@ export default function ProductScroll({ products }) {
               </button>
             </div>
 
-            {/* Overlay gradient at bottom */}
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-64 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+            {/* Bottom gradient for readability */}
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[calc(var(--action-row-h)+120px)] bg-gradient-to-t from-black/90 via-black/60 to-transparent" />
 
-            {/* Text overlay bottom */}
-            <div className="absolute inset-x-0 bottom-0 z-10">
-              <div className="text-white px-4 pb-8 md:px-8">
-                <h2 className="text-2xl sm:text-3xl md:text-4xl font-semibold leading-snug line-clamp-2">{p.title}</h2>
+            {/* Bottom details + action row */}
+            <div className="absolute inset-x-0 bottom-0 z-20" style={{ height: `var(--action-row-h)` }}>
+              <div className="text-white px-4 pb-4 md:px-8">
+                <h2 className="text-2xl sm:text-3xl md:text-4xl font-semibold leading-snug line-clamp-2">
+                  {p.title}
+                </h2>
                 {p.category && <p className="mt-1 text-sm text-gray-300 capitalize">{p.category}</p>}
-                <div className="mt-4 flex items-end gap-4">
+                <div className="mt-2 flex items-end gap-4">
                   <p className="text-amber-400 font-bold text-3xl">${p.price?.toFixed(2) || "N/A"}</p>
                   <span className="text-xs text-gray-400">incl. taxes</span>
                 </div>
 
-                {/* BIGGER mobile buttons */}
-                <div className="mt-6 flex flex-nowrap items-center gap-2 sm:gap-3">
-                  <button className="inline-flex flex-1 sm:flex-none items-center justify-center gap-2 px-5 py-3 sm:px-5 sm:py-2.5 rounded-full bg-amber-500 hover:bg-amber-600 text-white text-sm sm:text-sm font-medium shadow-md min-h-[50px]">
-                    <ShoppingCart className="h-6 w-6 sm:h-5 sm:w-5" />
-                    <span className="hidden sm:inline">Buy Now</span>
+                {/* action row (big tappable) - larger icons & hit area for mobile */}
+                <div className="mt-4 flex flex-nowrap items-center gap-3">
+                  <button
+                    className="inline-flex flex-1 items-center justify-center gap-2 px-6 py-3 rounded-full bg-amber-500 hover:bg-amber-600 text-white text-base font-medium shadow-lg min-h-[50px]"
+                    onClick={() => {
+                      /* wire to buy flow */
+                    }}
+                  >
+                    <ShoppingCart className="h-6 w-6" />
+                    <span>Buy Now</span>
                   </button>
-                  <button className="inline-flex items-center justify-center gap-2 px-5 py-3 sm:px-5 sm:py-2.5 rounded-full bg-slate-700 hover:bg-slate-600 text-gray-200 text-sm sm:text-sm shadow-md min-h-[50px]">
-                    <Plus className="h-6 w-6 sm:h-5 sm:w-5" />
-                    <span className="hidden sm:inline">Add to Cart</span>
+
+                  <button
+                    className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-full bg-slate-700 hover:bg-slate-600 text-gray-200 text-base shadow-lg min-h-[50px]"
+                    onClick={() => {
+                      /* add to cart */
+                    }}
+                  >
+                    <Plus className="h-6 w-6" />
+                    <span>Add</span>
                   </button>
-                  <button className="inline-flex items-center justify-center gap-2 px-5 py-3 sm:px-5 sm:py-2.5 rounded-full bg-slate-700 hover:bg-slate-600 text-gray-200 text-sm sm:text-sm shadow-md min-h-[50px]">
-                    <Eye className="h-6 w-6 sm:h-5 sm:w-5" />
-                    <span className="hidden sm:inline">View Details</span>
+
+                  <button
+                    className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-full bg-slate-700 hover:bg-slate-600 text-gray-200 text-base shadow-lg min-h-[50px]"
+                    onClick={() => {
+                      /* view details */
+                    }}
+                  >
+                    <Eye className="h-6 w-6" />
+                    <span>Details</span>
                   </button>
                 </div>
               </div>
@@ -370,27 +444,25 @@ export default function ProductScroll({ products }) {
         );
       })}
 
-      {/* Scroll hint */}
+      {/* scroll hint */}
       {activeIndex === 0 && (
-        <div className="pointer-events-none absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center text-white/80">
+        <div className="pointer-events-none absolute bottom-[calc(var(--action-row-h)+8px)] left-1/2 -translate-x-1/2 z-50 flex flex-col items-center text-white/80">
           <span className="text-xs mb-1">Scroll</span>
           <ChevronDown className="h-5 w-5 animate-bounce" />
         </div>
       )}
 
-      {/* Tiny toast for share fallback */}
+      {/* share toast */}
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-black/80 text-white text-sm px-3 py-2 rounded-full shadow-lg">
           {toast}
         </div>
       )}
 
-      {/* Reviews Drawer (bottom sheet) */}
+      {/* Reviews Drawer (UI only) */}
       {reviewsOpenFor && (
         <>
-          {/* Dim background */}
           <div className="fixed inset-0 bg-black/60 z-40" onClick={() => setReviewsOpenFor(null)} />
-          {/* Sheet */}
           <div className="fixed inset-x-0 bottom-0 z-50 bg-slate-900 border-t border-slate-700 rounded-t-2xl max-h-[70vh] overflow-y-auto shadow-2xl">
             <div className="sticky top-0 bg-slate-900/95 backdrop-blur-sm p-4 border-b border-slate-800 rounded-t-2xl flex items-center justify-between">
               <div className="h-1.5 w-12 bg-slate-700 rounded-full mx-auto absolute left-1/2 -translate-x-1/2 -mt-3" />
@@ -403,9 +475,13 @@ export default function ProductScroll({ products }) {
                 <X className="h-5 w-5" />
               </button>
             </div>
+
             <div className="p-4">
+              {/* simple mocked reviews */}
               <ul className="space-y-4">
-                {mockReviews.map((r, idx) => (
+                {[{ user: "Aditi", rating: 5, text: "Great quality, totally worth it!" },
+                  { user: "Rohit", rating: 4, text: "Looks premium, delivery was fast." },
+                  { user: "Maya", rating: 4, text: "Exactly as shown. Good value." }].map((r, idx) => (
                   <li key={idx} className="flex gap-3">
                     <div className="h-9 w-9 rounded-full bg-slate-700 flex items-center justify-center text-xs text-gray-200">
                       {r.user.slice(0, 2).toUpperCase()}
@@ -422,7 +498,7 @@ export default function ProductScroll({ products }) {
                   </li>
                 ))}
               </ul>
-              {/* Placeholder input (UI only) */}
+
               <div className="mt-4 border-t border-slate-800 pt-4">
                 <div className="flex gap-2">
                   <input
