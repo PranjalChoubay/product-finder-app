@@ -207,8 +207,8 @@ export default function ProductScroll({ products }) {
       const currentPhysicalIndex = Math.round(startTop / vh);
       let targetPhysicalIndex = currentPhysicalIndex;
       
-      const flickThreshold = 0.4; // Velocity threshold for a "flick"
-      const distanceThreshold = vh * 0.25; // Distance threshold (25% of screen)
+      const flickThreshold = 0.32; // slightly lower for snappier feel
+      const distanceThreshold = vh * 0.18; // 18% of screen for easier snap
 
       if (Math.abs(velocity) > flickThreshold) {
         // It's a flick, move to next/prev
@@ -284,9 +284,24 @@ export default function ProductScroll({ products }) {
       {/* Local styles for IG-like heart animations */}
       <style>{`
         @keyframes like-pop { 0% { transform: scale(0.9); } 45% { transform: scale(1.25); } 100% { transform: scale(1); } }
-        .like-pop { animation: like-pop 280ms ease-out; }
+        .like-pop { animation: like-pop 280ms cubic-bezier(0.22, 1, 0.36, 1); }
         @keyframes heart-burst { 0% { transform: scale(0.8); opacity: 0; } 20% { opacity: 1; } 100% { transform: scale(1.4); opacity: 0; } }
-        .heart-burst { animation: heart-burst 550ms ease-out forwards; }
+        .heart-burst { animation: heart-burst 550ms cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+        /* Premium scroll: hardware acceleration & smooth fade/scale */
+        .premium-section {
+          will-change: transform, opacity;
+          transition: opacity 0.5s cubic-bezier(0.22, 1, 0.36, 1), transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        .premium-section.inactive {
+          opacity: 0.7;
+          transform: scale(0.97);
+          filter: blur(1.5px);
+        }
+        .premium-section.active {
+          opacity: 1;
+          transform: scale(1);
+          filter: none;
+        }
       `}</style>
 
       {loopedProducts.map((p, i) => {
@@ -298,15 +313,15 @@ export default function ProductScroll({ products }) {
             key={i}
             data-index={i}
             ref={(el) => (sectionRefs.current[i] = el)}
-            className="relative h-screen w-full snap-start snap-always flex items-center justify-center bg-black"
+            className={`premium-section h-screen w-full snap-start snap-always flex items-center justify-center bg-black ${
+              activeIndex === ((i % segmentSize) + segmentSize) % segmentSize ? "active" : "inactive"
+            }`}
             onDoubleClick={() => {
               const id = p.id;
               if (!likedIds.has(id)) toggleLike(id);
               triggerBurst(id);
             }}
             onTouchEndCapture={(e) => {
-              // use onTouchEndCapture to make sure our tap logic runs
-              // even if the scroll handler stops propagation.
               handleTapLike(p.id);
             }}
           >
