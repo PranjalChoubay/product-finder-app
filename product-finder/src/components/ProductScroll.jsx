@@ -219,8 +219,8 @@ export default function ProductScroll({ products }) {
       const currentPhysicalIndex = Math.round(startTop / vh);
       let targetPhysicalIndex = currentPhysicalIndex;
       
-      const flickThreshold = 0.18; // increased sensitivity (was 0.32)
-      const distanceThreshold = vh * 0.10; // increased sensitivity (was 0.18)
+      const flickThreshold = 0.09; // even higher sensitivity
+      const distanceThreshold = vh * 0.05; // even higher sensitivity
 
       if (Math.abs(velocity) > flickThreshold) {
         // It's a flick, move to next/prev
@@ -248,6 +248,23 @@ export default function ProductScroll({ products }) {
       }
     };
   }, []);
+
+  // Preload images for previous and next product (fix flicker)
+  useEffect(() => {
+    if (!loopedProducts.length) return;
+    const total = loopedProducts.length;
+    const i = segmentSize + activeIndex; // middle segment
+    const prev = loopedProducts[i - 1];
+    const next = loopedProducts[i + 1];
+    if (prev && prev.thumbnail) {
+      const imgPrev = new window.Image();
+      imgPrev.src = prev.thumbnail;
+    }
+    if (next && next.thumbnail) {
+      const imgNext = new window.Image();
+      imgNext.src = next.thumbnail;
+    }
+  }, [activeIndex, loopedProducts, segmentSize]);
 
   // --- Reviews Drawer ---
   const [reviewsOpenFor, setReviewsOpenFor] = useState(null);
@@ -317,20 +334,6 @@ export default function ProductScroll({ products }) {
       {loopedProducts.map((p, i) => {
         const { likes = 0, reviews = 0 } = seededCounts.get(p.id) || {};
         const displayLikes = likes + (likedIds.has(p.id) ? 1 : 0);
-
-        // Preload images for 1 previous and 1 next product
-        if (i > 0 && i < loopedProducts.length - 1) {
-          const prev = loopedProducts[i - 1];
-          const next = loopedProducts[i + 1];
-          if (prev && prev.thumbnail) {
-            const imgPrev = new window.Image();
-            imgPrev.src = prev.thumbnail;
-          }
-          if (next && next.thumbnail) {
-            const imgNext = new window.Image();
-            imgNext.src = next.thumbnail;
-          }
-        }
 
         return (
           <section
