@@ -129,19 +129,6 @@ export default function ProductScroll({ products }) {
         .like-pop { animation: like-pop 280ms cubic-bezier(0.22, 1, 0.36, 1); }
         @keyframes heart-burst { 0% { transform: scale(0.8); opacity: 0; } 20% { opacity: 1; } 100% { transform: scale(1.4); opacity: 0; } }
         .heart-burst { animation: heart-burst 550ms cubic-bezier(0.22, 1, 0.36, 1) forwards; }
-        /* Premium scroll: hardware acceleration & smooth fade/scale */
-        .premium-section {
-          will-change: transform, opacity;
-          transition: opacity 0.5s cubic-bezier(0.22, 1, 0.36, 1), transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
-        }
-        .premium-section.inactive {
-          opacity: 0.7;
-          transform: scale(0.97);
-        }
-        .premium-section.active {
-          opacity: 1;
-          transform: scale(1);
-        }
       `}</style>
 
       {loopedProducts.map((p, i) => {
@@ -152,9 +139,7 @@ export default function ProductScroll({ products }) {
             key={i}
             data-index={i}
             ref={(el) => (sectionRefs.current[i] = el)}
-            className={`premium-section h-screen w-full snap-start snap-always flex items-center justify-center bg-black ${
-              activeIndex === ((i % segmentSize) + segmentSize) % segmentSize ? "active" : "inactive"
-            }`}
+            className="h-screen w-full snap-start snap-always flex items-center justify-center bg-black"
             onDoubleClick={() => {
               const id = p.id;
               if (!likedIds.has(id)) toggleLike(id);
