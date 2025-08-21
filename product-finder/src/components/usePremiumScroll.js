@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export function usePremiumScroll(products) {
   const containerRef = useRef(null);
@@ -8,22 +8,6 @@ export function usePremiumScroll(products) {
   const loopedProducts = segmentSize > 0 ? [...products, ...products, ...products] : [];
   const isJumpingRef = useRef(false);
   const debounceTimeoutRef = useRef(null);
-
-  // Preload images for previous and next product (fix flicker)
-  useEffect(() => {
-    if (!loopedProducts.length) return;
-    const i = segmentSize + activeIndex; // middle segment
-    const prev = loopedProducts[i - 1];
-    const next = loopedProducts[i + 1];
-    if (prev && prev.thumbnail) {
-      const imgPrev = new window.Image();
-      imgPrev.src = prev.thumbnail;
-    }
-    if (next && next.thumbnail) {
-      const imgNext = new window.Image();
-      imgNext.src = next.thumbnail;
-    }
-  }, [activeIndex, loopedProducts, segmentSize]);
 
   // Keyboard navigation (desktop/testing convenience)
   useEffect(() => {
