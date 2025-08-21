@@ -134,24 +134,28 @@ export default function ProductScroll({ products }) {
             key={p.id || i} // Use a stable key
             data-index={i}
             ref={(el) => (sectionRefs.current[i] = el)}
-            className="h-screen w-full snap-start snap-always flex items-center justify-center bg-black"
+            // BUG FIX: Added 'relative' class here
+            className="relative h-screen w-full snap-start snap-always flex items-center justify-center bg-black"
             onDoubleClick={() => {
               if (!likedIds.has(p.id)) toggleLike(p.id);
               triggerBurst(p.id);
             }}
             onTouchEndCapture={() => handleTapLike(p.id)}
           >
+            {/* Product image centered */}
             <img
               src={p.thumbnail}
               alt={p.title}
               onError={(e) => (e.currentTarget.src = "https://via.placeholder.com/1200x1600/0B1220/FFFFFF?text=No+Image")}
               className="object-contain max-h-full max-w-full h-[80vh]"
             />
+            {/* IG-style red heart burst (center) */}
             {burstProductId === p.id && (
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center z-10">
                 <Heart className="h-28 w-28 text-red-500 fill-red-500 heart-burst drop-shadow-[0_0_12px_rgba(239,68,68,0.6)]" />
               </div>
             )}
+            {/* IG-style action rail on the right */}
             <div className="absolute right-4 top-[70%] -translate-y-1/2 flex flex-col items-center gap-3 sm:gap-4 z-30">
               <button
                 type="button"
@@ -188,7 +192,9 @@ export default function ProductScroll({ products }) {
                 <Share2 className="h-8 w-8" />
               </button>
             </div>
+            {/* Overlay gradient at bottom */}
             <div className="pointer-events-none absolute inset-x-0 bottom-0 h-64 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+            {/* Text overlay bottom */}
             <div className="absolute inset-x-0 bottom-0 z-10">
               <div className="text-white px-4 pb-8 md:px-8">
                 <h2 className="text-2xl sm:text-3xl md:text-4xl font-semibold leading-snug line-clamp-2">{p.title}</h2>
