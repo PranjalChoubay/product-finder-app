@@ -14,16 +14,25 @@ export function usePremiumScroll(products) {
     velocity: 0,
   }).current;
 
-  const vh = window.innerHeight;
+  // Keep a reactive viewport height so translations/snap thresholds adapt when mobile chrome/navbar shows/hides
+  const [vh, setVh] = useState(typeof window !== 'undefined' ? window.innerHeight : 800);
 
-  // This effect recalculates the container's position whenever the activeIndex changes.
+  useEffect(() => {
+    const onResize = () => setVh(window.innerHeight);
+    onResize();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  // Recalculate position when active item changes or viewport height changes
   useEffect(() => {
     setTranslateY(-activeIndex * vh);
   }, [activeIndex, vh]);
 
   const onTouchStart = useCallback((e) => {
-    gestureRef.startY = e.touches[0].clientY;
-    gestureRef.lastY = e.touches[0].clientY;
+    const startY = e.touches[0].clientY;
+    gestureRef.startY = startY;
+    gestureRef.lastY = startY;
     gestureRef.startTranslateY = -activeIndex * vh;
     gestureRef.lastTime = Date.now();
     gestureRef.velocity = 0;
@@ -32,17 +41,16 @@ export function usePremiumScroll(products) {
 
   const onTouchMove = useCallback((e) => {
     const currentY = e.touches[0].clientY;
-    const deltaY = currentY - gestureRef.startY;
     const currentTime = Date.now();
     const deltaTime = currentTime - gestureRef.lastTime;
 
-    // Calculate velocity
     if (deltaTime > 0) {
       gestureRef.velocity = (currentY - gestureRef.lastY) / deltaTime;
     }
     gestureRef.lastY = currentY;
     gestureRef.lastTime = currentTime;
 
+    const deltaY = currentY - gestureRef.startY;
     setTranslateY(gestureRef.startTranslateY + deltaY);
   }, [gestureRef]);
 
@@ -55,20 +63,14 @@ export function usePremiumScroll(products) {
     const flickThreshold = 0.3; // High velocity flick
     const distanceThreshold = vh * 0.05; // Drag 5% of the screen
 
-    // Decision logic to change the active index
-    // 1. Check for a fast flick down (to next item)
     if (gestureRef.velocity < -flickThreshold && activeIndex < products.length - 1) {
-      setActiveIndex(activeIndex + 1);
-    // 2. Check for a fast flick up (to previous item)
+      setActiveIndex(i => Math.min(i + 1, products.length - 1));
     } else if (gestureRef.velocity > flickThreshold && activeIndex > 0) {
-      setActiveIndex(activeIndex - 1);
-    // 3. Check for a long drag down
+      setActiveIndex(i => Math.max(i - 1, 0));
     } else if (deltaY < -distanceThreshold && activeIndex < products.length - 1) {
-      setActiveIndex(activeIndex + 1);
-    // 4. Check for a long drag up
+      setActiveIndex(i => Math.min(i + 1, products.length - 1));
     } else if (deltaY > distanceThreshold && activeIndex > 0) {
-      setActiveIndex(activeIndex - 1);
-    // 5. If none of the above, snap back to the current item
+      setActiveIndex(i => Math.max(i - 1, 0));
     } else {
       setTranslateY(endTranslateY);
     }
@@ -77,11 +79,12 @@ export function usePremiumScroll(products) {
   return {
     containerRef,
     activeIndex,
-    // The props to be applied to the gesture-controlled wrapper
     wrapperProps: {
       style: {
         transform: `translateY(${translateY}px)`,
-        transition: `transform ${transitionDuration}`,
+        transition: `transform ${transitionDuration} cubic-bezier(0.22,1,0.36,1)`,
+        willChange: 'transform',
+        touchAction: 'pan-y',
       },
       onTouchStart,
       onTouchMove,

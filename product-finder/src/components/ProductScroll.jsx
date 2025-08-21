@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ShoppingCart, Plus, Eye, Heart, MessageCircle, X, Share2 } from "lucide-react";
-import { usePremiumScroll } from "./usePremiumScroll"; // The new gesture-based hook
+import { usePremiumScroll } from "./usePremiumScroll"; // The gesture-based hook (updated)
 
 export default function ProductScroll({ products }) {
-  // All state management from before remains the same...
+  // --- same state/logic as before (likes, bursts, reviews, etc) ---
   const [likedIds, setLikedIds] = useState(new Set());
   useEffect(() => {
     try {
@@ -95,6 +95,32 @@ export default function ProductScroll({ products }) {
     } catch {}
   };
 
+  // --- Fix for mobile viewport (100vh on iOS) ---
+  useEffect(() => {
+    const setVh = () => {
+      // set a --vh CSS variable so we can reliably use true viewport height on mobile browsers
+      document.documentElement.style.setProperty('--vh', `${window.innerHeight * 0.01}px`);
+    };
+    setVh();
+    window.addEventListener('resize', setVh);
+    return () => window.removeEventListener('resize', setVh);
+  }, []);
+
+  // --- position the right-side action stack slightly higher on very short screens ---
+  const [actionTop, setActionTop] = useState('70%');
+  useEffect(() => {
+    const calc = () => {
+      const h = window.innerHeight;
+      if (h <= 640) setActionTop('55%');
+      else if (h <= 800) setActionTop('62%');
+      else setActionTop('70%');
+    };
+    calc();
+    window.addEventListener('resize', calc);
+    return () => window.removeEventListener('resize', calc);
+  }, []);
+
+  // Use the (updated) gesture hook
   const { containerRef, activeIndex, wrapperProps } = usePremiumScroll(productsWithData);
 
   const renderedProducts = useMemo(() => {
@@ -118,7 +144,16 @@ export default function ProductScroll({ products }) {
   }
 
   return (
-    <div ref={containerRef} className="relative h-screen w-full bg-black overflow-hidden touch-pan-y">
+    <div
+      ref={containerRef}
+      className="relative w-full bg-black overflow-hidden"
+      style={{
+        // use the --vh CSS variable so 100% height equals the true viewport height on mobile (fixes iOS issues)
+        height: 'calc(var(--vh, 1vh) * 100)',
+        WebkitOverflowScrolling: 'touch',
+        touchAction: 'pan-y',
+      }}
+    >
       <style>{`
         @keyframes like-pop { 0% { transform: scale(0.9); } 45% { transform: scale(1.25); } 100% { transform: scale(1); } }
         .like-pop { animation: like-pop 280ms cubic-bezier(0.22, 1, 0.36, 1); }
@@ -136,7 +171,6 @@ export default function ProductScroll({ products }) {
             <div
               key={product.id}
               className="absolute top-0 left-0 h-full w-full flex items-center justify-center"
-              // BUG FIX: The active product gets a higher z-index to ensure its UI is on top.
               style={{
                 transform: `translateY(${position}px)`,
                 zIndex: isActive ? 10 : 1,
@@ -150,38 +184,46 @@ export default function ProductScroll({ products }) {
               <img
                 src={product.thumbnail}
                 alt={product.title}
-                className="object-contain max-h-full max-w-full h-[60vh] sm:h-[80vh] w-auto mx-auto drop-shadow-xl"
+                // keep object fit but use a maxHeight based on the real viewport to avoid overflow on mobile
+                style={{ maxHeight: 'calc(var(--vh, 1vh) * 0.8)', maxWidth: '100%', objectFit: 'contain' }}
+                className="object-contain"
               />
               {burstProductId === product.id && (
                 <div className="pointer-events-none absolute inset-0 flex items-center justify-center z-10">
                   <Heart className="h-28 w-28 text-red-500 fill-red-500 heart-burst" />
                 </div>
               )}
-              {/* Responsive action bar: move to bottom on mobile, right on desktop */}
-              <div className="absolute bottom-28 left-1/2 -translate-x-1/2 flex flex-row items-center gap-4 z-30 sm:bottom-auto sm:right-4 sm:top-[70%] sm:-translate-y-1/2 sm:left-auto sm:flex-col sm:items-center sm:gap-4">
+
+              {/* Right side vertical action buttons. Position adjusted dynamically on small screens to avoid overlap with bottom controls */}
+              <div
+                className="pointer-events-auto absolute right-4 -translate-y-1/2 flex flex-col items-center gap-3 sm:gap-4 z-30"
+                style={{ top: actionTop }}
+              >
                 <button type="button" onClick={() => toggleLike(product.id)} className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-black/30 text-white">
                   <Heart className={`h-8 w-8 transition-all ${likedIds.has(product.id) ? "fill-red-500 text-red-500" : "text-white"} ${likePopId === product.id ? "like-pop" : ""}`} />
                 </button>
-                <span className="text-xs text-white/90 min-w-[2.5rem] text-center">{displayLikes.toLocaleString()}</span>
+                <span className="text-xs text-white/90">{displayLikes.toLocaleString()}</span>
                 <button type="button" onClick={() => setReviewsOpenFor(product.id)} className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-black/30 text-white">
                   <MessageCircle className="h-8 w-8" />
                 </button>
-                <span className="text-xs text-white/90 min-w-[2.5rem] text-center">{reviews.toLocaleString()}</span>
+                <span className="text-xs text-white/90">{reviews.toLocaleString()}</span>
                 <button type="button" onClick={() => shareProduct(product)} className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-black/30 text-white">
                   <Share2 className="h-8 w-8" />
                 </button>
               </div>
+
               <div className="pointer-events-none absolute inset-x-0 bottom-0 h-64 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-              <div className="absolute inset-x-0 bottom-0 z-10">
-                <div className="text-white px-4 pb-24 pt-4 md:px-8 md:pb-8">
-                  <h2 className="text-xl sm:text-2xl md:text-4xl font-semibold text-center break-words">{product.title}</h2>
-                  <p className="text-amber-400 font-bold text-2xl sm:text-3xl mt-2 sm:mt-4 text-center">${product.price?.toFixed(2) || "N/A"}</p>
-                  <div className="mt-4 sm:mt-6 flex flex-nowrap items-center justify-center gap-2 sm:gap-3">
-                    <button className="inline-flex flex-1 sm:flex-none items-center justify-center gap-2 px-4 py-2 sm:px-5 sm:py-3 rounded-full bg-amber-500 text-white font-medium text-sm sm:text-base">
+
+              <div className="absolute inset-x-0 bottom-0 z-10" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 1rem)' }}>
+                <div className="text-white px-4 pb-4 md:px-8">
+                  <h2 className="text-2xl sm:text-3xl md:text-4xl font-semibold">{product.title}</h2>
+                  <p className="text-amber-400 font-bold text-3xl mt-4">${product.price?.toFixed(2) || "N/A"}</p>
+                  <div className="mt-6 flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-3">
+                    <button className="inline-flex flex-auto sm:flex-none items-center justify-center gap-2 px-5 py-3 rounded-full bg-amber-500 text-white font-medium min-w-0">
                       <ShoppingCart className="h-6 w-6 sm:h-5 sm:w-5" />
-                      <span className="hidden sm:inline">Buy Now</span>
+                      <span className="truncate ml-2">Buy Now</span>
                     </button>
-                    <button className="inline-flex items-center justify-center gap-2 px-4 py-2 sm:px-5 sm:py-3 rounded-full bg-slate-700 text-gray-200 text-sm sm:text-base">
+                    <button className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-full bg-slate-700 text-gray-200">
                       <Plus className="h-6 w-6 sm:h-5 sm:w-5" />
                     </button>
                     <button className="hidden sm:inline-flex items-center justify-center gap-2 px-5 py-3 rounded-full bg-slate-700 text-gray-200">
