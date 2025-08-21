@@ -3,7 +3,7 @@ import { ChevronDown, ShoppingCart, Plus, Eye, Heart, MessageCircle, X, Share2 }
 import { usePremiumScroll } from "./usePremiumScroll"; // The new gesture-based hook
 
 export default function ProductScroll({ products }) {
-  // --- All original state management is restored ---
+  // All state management from before remains the same...
   const [likedIds, setLikedIds] = useState(new Set());
   useEffect(() => {
     try {
@@ -95,8 +95,8 @@ export default function ProductScroll({ products }) {
     } catch {}
   };
 
-  // --- New gesture hook and virtualization logic ---
   const { containerRef, activeIndex, wrapperProps } = usePremiumScroll(productsWithData);
+
   const renderedProducts = useMemo(() => {
     const items = [];
     const vh = window.innerHeight;
@@ -105,6 +105,7 @@ export default function ProductScroll({ products }) {
         items.push({
           product: productsWithData[i],
           position: i * vh,
+          index: i,
         });
       }
     }
@@ -124,26 +125,28 @@ export default function ProductScroll({ products }) {
         @keyframes heart-burst { 0% { transform: scale(0.8); opacity: 0; } 20% { opacity: 1; } 100% { transform: scale(1.4); opacity: 0; } }
         .heart-burst { animation: heart-burst 550ms cubic-bezier(0.22, 1, 0.36, 1) forwards; }
       `}</style>
-
-      {/* This wrapper moves via transform, controlled by the gesture hook */}
+      
       <div className="relative h-full w-full" {...wrapperProps}>
-        {renderedProducts.map(({ product, position }) => {
+        {renderedProducts.map(({ product, position, index }) => {
           const { likes = 0, reviews = 0 } = product.seededCounts;
           const displayLikes = likes + (likedIds.has(product.id) ? 1 : 0);
+          const isActive = index === activeIndex;
 
           return (
-            // Each product is absolutely positioned and translated into place
             <div
               key={product.id}
               className="absolute top-0 left-0 h-full w-full flex items-center justify-center"
-              style={{ transform: `translateY(${position}px)` }}
+              // BUG FIX: The active product gets a higher z-index to ensure its UI is on top.
+              style={{
+                transform: `translateY(${position}px)`,
+                zIndex: isActive ? 10 : 1,
+              }}
               onDoubleClick={() => {
                 if (!likedIds.has(product.id)) toggleLike(product.id);
                 triggerBurst(product.id);
               }}
               onTouchEndCapture={() => handleTapLike(product.id)}
             >
-              {/* --- Full UI for each product is now restored --- */}
               <img
                 src={product.thumbnail}
                 alt={product.title}
@@ -191,7 +194,6 @@ export default function ProductScroll({ products }) {
         })}
       </div>
 
-      {/* --- All overlays and drawers are also restored --- */}
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-black/80 text-white text-sm px-3 py-2 rounded-full shadow-lg">
           {toast}
