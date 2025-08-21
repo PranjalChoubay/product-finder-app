@@ -97,7 +97,7 @@ export function usePremiumScroll(products) {
     // we know the scrolling has stopped.
     const handleScroll = () => {
       clearTimeout(scrollStopTimer);
-      scrollStopTimer = setTimeout(onScrollStop, 50);
+      scrollStopTimer = setTimeout(onScrollStop, 20);
     };
     
     el.addEventListener('scroll', handleScroll);
