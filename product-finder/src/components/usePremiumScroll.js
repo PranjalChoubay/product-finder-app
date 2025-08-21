@@ -77,18 +77,22 @@ export function usePremiumScroll(products) {
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
-
+    
+    let scrollEndTimeout = null;
     let startY = 0;
-    let startX = 0; // NEW: track horizontal start
+    let startX = 0;
     let startTop = 0;
     let startTime = 0;
     let isDragging = false;
     let animationFrameId = null;
 
     const onTouchStart = (e) => {
+      // Clear any pending timeouts to prevent snap from re-enabling during a new touch
+      if (scrollEndTimeout) clearTimeout(scrollEndTimeout);
+      
       isDragging = true;
       startY = e.touches[0].clientY;
-      startX = e.touches[0].clientX; // NEW: record horizontal start position
+      startX = e.touches[0].clientX;
       startTop = el.scrollTop;
       startTime = Date.now();
       el.style.scrollSnapType = "none";
@@ -106,7 +110,6 @@ export function usePremiumScroll(products) {
         const deltaY = currentY - startY;
         const deltaX = currentX - startX;
 
-        // NEW: Only scroll if the gesture is more vertical than horizontal
         if (Math.abs(deltaY) > Math.abs(deltaX)) {
           el.scrollTop = startTop - deltaY;
         }
@@ -128,12 +131,13 @@ export function usePremiumScroll(products) {
       const dy = endTop - startTop;
       const velocity = dy / dt;
 
-      el.style.scrollSnapType = "y mandatory";
+      // NOTE: We DO NOT re-enable scroll-snap-type here to avoid conflicts.
+      
       const currentPhysicalIndex = Math.round(startTop / vh);
       let targetPhysicalIndex = currentPhysicalIndex;
 
       const flickThreshold = 0.075;
-      const distanceThreshold = vh * 0.03;
+      const distanceThreshold = vh * 0.05;
 
       if (Math.abs(velocity) > flickThreshold) {
         targetPhysicalIndex = velocity > 0 ? currentPhysicalIndex + 1 : currentPhysicalIndex - 1;
@@ -145,6 +149,11 @@ export function usePremiumScroll(products) {
       
       const targetTop = targetPhysicalIndex * vh;
       el.scrollTo({ top: targetTop, behavior: "smooth" });
+
+      // NEW: Re-enable snap type only AFTER the scroll animation has had time to finish.
+      scrollEndTimeout = setTimeout(() => {
+        el.style.scrollSnapType = "y mandatory";
+      }, 500); // 500ms is a safe duration for most smooth scroll animations
     };
 
     el.addEventListener("touchstart", onTouchStart, { passive: true });
@@ -155,9 +164,8 @@ export function usePremiumScroll(products) {
       el.removeEventListener("touchstart", onTouchStart);
       el.removeEventListener("touchmove", onTouchMove);
       el.removeEventListener("touchend", onTouchEnd);
-      if (animationFrameId) {
-        cancelAnimationFrame(animationFrameId);
-      }
+      if (animationFrameId) cancelAnimationFrame(animationFrameId);
+      if (scrollEndTimeout) clearTimeout(scrollEndTimeout);
     };
   }, [products.length]);
 
