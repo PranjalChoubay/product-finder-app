@@ -184,10 +184,9 @@ export default function ProductScroll({ products }) {
               <img
                 src={product.thumbnail}
                 alt={product.title}
-                // keep object fit but use a maxHeight based on the real viewport to avoid overflow on mobile
-                style={{ maxHeight: 'calc(var(--vh, 1vh) * 0.8)', maxWidth: '100%', objectFit: 'contain' }}
-                className="object-contain"
+                className="h-full w-full object-contain"
               />
+
               {burstProductId === product.id && (
                 <div className="pointer-events-none absolute inset-0 flex items-center justify-center z-10">
                   <Heart className="h-28 w-28 text-red-500 fill-red-500 heart-burst" />
