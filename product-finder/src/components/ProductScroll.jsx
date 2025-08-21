@@ -295,12 +295,10 @@ export default function ProductScroll({ products }) {
         .premium-section.inactive {
           opacity: 0.7;
           transform: scale(0.97);
-          filter: blur(1.5px);
         }
         .premium-section.active {
           opacity: 1;
           transform: scale(1);
-          filter: none;
         }
       `}</style>
 
