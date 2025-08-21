@@ -53,7 +53,7 @@ export function usePremiumScroll(products) {
       debounceTimeoutRef.current = setTimeout(() => {
         const newIndex = parseInt(intersectingEntry.target.dataset.index, 10);
         setActiveIndex(newIndex);
-      }, 100);
+      }, 150); // Increased debounce for stability on iOS
     };
 
     const observer = new window.IntersectionObserver(observerCallback, {
@@ -78,105 +78,60 @@ export function usePremiumScroll(products) {
     const el = containerRef.current;
     if (!el) return;
     
-    let scrollStopTimer = null;
     let startY = 0;
-    let startX = 0;
     let startTop = 0;
     let startTime = 0;
     let isDragging = false;
-    let animationFrameId = null;
-
-    // NEW: This function runs when scrolling stops and re-enables CSS snapping.
-    const onScrollStop = () => {
-      if (el) {
-        el.style.scrollSnapType = 'y mandatory';
-      }
-    };
     
-    // NEW: A scroll listener that resets a timer. When the timer finally runs,
-    // we know the scrolling has stopped.
-    const handleScroll = () => {
-      clearTimeout(scrollStopTimer);
-      scrollStopTimer = setTimeout(onScrollStop, 7.5);
-    };
-    
-    el.addEventListener('scroll', handleScroll);
-
     const onTouchStart = (e) => {
-      clearTimeout(scrollStopTimer);
       isDragging = true;
       startY = e.touches[0].clientY;
-      startX = e.touches[0].clientX;
       startTop = el.scrollTop;
       startTime = Date.now();
-      el.style.scrollSnapType = "none";
-      if (animationFrameId) {
-        cancelAnimationFrame(animationFrameId);
-      }
     };
 
-    const onTouchMove = (e) => {
-      if (!isDragging) return;
-
-      const updateScroll = () => {
-        const currentY = e.touches[0].clientY;
-        const currentX = e.touches[0].clientX;
-        const deltaY = currentY - startY;
-        const deltaX = currentX - startX;
-
-        if (Math.abs(deltaY) > Math.abs(deltaX)) {
-          el.scrollTop = startTop - deltaY;
-        }
-        animationFrameId = null;
-      };
-
-      if (animationFrameId) {
-        cancelAnimationFrame(animationFrameId);
-      }
-      animationFrameId = requestAnimationFrame(updateScroll);
-    };
-
-    const onTouchEnd = () => {
+    const onTouchEnd = (e) => {
       if (!isDragging) return;
       isDragging = false;
       const vh = window.innerHeight;
       const dt = Date.now() - startTime;
-      const endTop = el.scrollTop;
-      const dy = endTop - startTop;
+      const endY = e.changedTouches[0].clientY;
+      const dy = endY - startY;
       const velocity = dy / dt;
       
       const currentPhysicalIndex = Math.round(startTop / vh);
       let targetPhysicalIndex = currentPhysicalIndex;
 
       const flickThreshold = 0.075;
-      const distanceThreshold = vh * 0.05;
-
+      const distanceThreshold = vh * 0.03;
+      
+      // We check the opposite of dy for distance, as a downward swipe (positive dy) means scrolling up (negative scroll).
       if (Math.abs(velocity) > flickThreshold) {
-        targetPhysicalIndex = velocity > 0 ? currentPhysicalIndex + 1 : currentPhysicalIndex - 1;
+        targetPhysicalIndex = velocity > 0 ? currentPhysicalIndex - 1 : currentPhysicalIndex + 1;
       } else if (Math.abs(dy) > distanceThreshold) {
-        targetPhysicalIndex = dy > 0 ? currentPhysicalIndex + 1 : currentPhysicalIndex - 1;
+        targetPhysicalIndex = dy > 0 ? currentPhysicalIndex - 1 : currentPhysicalIndex + 1;
       }
 
       targetPhysicalIndex = Math.max(0, Math.min(products.length - 1, targetPhysicalIndex));
       
       const targetTop = targetPhysicalIndex * vh;
-      el.scrollTo({ top: targetTop, behavior: "smooth" });
       
-      // REMOVED: The unreliable setTimeout from here. The scroll listener now handles this.
+      // This is the most compatible way to scroll.
+      // It tells the browser to go to a specific pixel, and the native scroll-snap
+      // behavior will ensure it lands smoothly and correctly.
+      el.scrollTo({
+        top: targetTop,
+        behavior: 'smooth',
+      });
     };
 
     el.addEventListener("touchstart", onTouchStart, { passive: true });
-    el.addEventListener("touchmove", onTouchMove, { passive:true });
     el.addEventListener("touchend", onTouchEnd, { passive: true });
 
     // Cleanup function for the effect
     return () => {
-      el.removeEventListener('scroll', handleScroll);
       el.removeEventListener("touchstart", onTouchStart);
-      el.removeEventListener("touchmove", onTouchMove);
       el.removeEventListener("touchend", onTouchEnd);
-      if (animationFrameId) cancelAnimationFrame(animationFrameId);
-      if (scrollStopTimer) clearTimeout(scrollStopTimer);
     };
   }, [products.length]);
 
