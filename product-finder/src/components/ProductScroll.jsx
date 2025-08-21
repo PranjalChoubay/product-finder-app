@@ -121,28 +121,27 @@ export default function ProductScroll({ products }) {
         // Seamless infinite loop: keep user in the middle segment
         if (newIndex < segmentSize) {
           isJumpingRef.current = true;
-          // Disable transitions and pointer events for seamless jump
           container.style.transition = "none";
           container.style.pointerEvents = "none";
-          container.scrollTo({ top: container.scrollTop + segmentSize * vh, behavior: "auto" });
           requestAnimationFrame(() => {
-            container.style.transition = "";
-            container.style.pointerEvents = "";
-            setTimeout(() => {
+            container.scrollTo({ top: container.scrollTop + segmentSize * vh, behavior: "auto" });
+            requestAnimationFrame(() => {
+              container.style.transition = "";
+              container.style.pointerEvents = "";
               isJumpingRef.current = false;
-            }, 30);
+            });
           });
         } else if (newIndex >= 2 * segmentSize) {
           isJumpingRef.current = true;
           container.style.transition = "none";
           container.style.pointerEvents = "none";
-          container.scrollTo({ top: container.scrollTop - segmentSize * vh, behavior: "auto" });
           requestAnimationFrame(() => {
-            container.style.transition = "";
-            container.style.pointerEvents = "";
-            setTimeout(() => {
+            container.scrollTo({ top: container.scrollTop - segmentSize * vh, behavior: "auto" });
+            requestAnimationFrame(() => {
+              container.style.transition = "";
+              container.style.pointerEvents = "";
               isJumpingRef.current = false;
-            }, 30);
+            });
           });
         }
       }, 120);
