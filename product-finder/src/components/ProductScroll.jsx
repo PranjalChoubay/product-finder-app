@@ -7,7 +7,8 @@ export default function ProductScroll({ products }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const segmentSize = products.length;
   const loopedProducts = segmentSize > 0 ? [...products, ...products, ...products] : [];
-  const isJumpingRef = useRef(false); // Ref to prevent scroll events during programmatic jumps
+  const isJumpingRef = useRef(false);
+  const debounceTimeoutRef = useRef(null); // Ref for debouncing scroll events
 
   // Likes persisted in localStorage shared with cards
   const [likedIds, setLikedIds] = useState(new Set());
@@ -28,7 +29,6 @@ export default function ProductScroll({ products }) {
         next.delete(id);
       } else {
         next.add(id);
-        // trigger IG-like pop on the small heart
         setLikePopId(id);
         window.setTimeout(() => {
           setLikePopId((curr) => (curr === id ? null : curr));
@@ -79,7 +79,7 @@ export default function ProductScroll({ products }) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  // --- NEW: Intersection Observer for perfect scroll detection ---
+  // --- IMPROVED: Debounced Intersection Observer for perfect scroll detection ---
   useEffect(() => {
     const container = containerRef.current;
     if (!container || segmentSize === 0) return;
@@ -90,31 +90,38 @@ export default function ProductScroll({ products }) {
     container.scrollTop = segmentSize * vh;
 
     const observerCallback = (entries) => {
-      if (isJumpingRef.current) return; // Ignore observer events during a jump
+      if (isJumpingRef.current) return;
 
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          const newIndex = parseInt(entry.target.dataset.index, 10);
-          const normalizedIndex = ((newIndex % segmentSize) + segmentSize) % segmentSize;
-          setActiveIndex(normalizedIndex);
+      const intersectingEntry = entries.find(entry => entry.isIntersecting);
+      if (!intersectingEntry) return;
 
-          // Logic for seamless infinite loop
-          if (newIndex < segmentSize) {
-            isJumpingRef.current = true;
-            container.scrollTop += segmentSize * vh;
-            setTimeout(() => { isJumpingRef.current = false; }, 100); // Reset jump flag
-          } else if (newIndex >= 2 * segmentSize) {
-            isJumpingRef.current = true;
-            container.scrollTop -= segmentSize * vh;
-            setTimeout(() => { isJumpingRef.current = false; }, 100); // Reset jump flag
-          }
+      // Clear previous timeout to debounce
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current);
+      }
+
+      // Set a new timeout to wait for the scroll to settle
+      debounceTimeoutRef.current = setTimeout(() => {
+        const newIndex = parseInt(intersectingEntry.target.dataset.index, 10);
+        const normalizedIndex = ((newIndex % segmentSize) + segmentSize) % segmentSize;
+        setActiveIndex(normalizedIndex);
+
+        // Logic for seamless infinite loop
+        if (newIndex < segmentSize) {
+          isJumpingRef.current = true;
+          container.scrollTo({ top: container.scrollTop + segmentSize * vh, behavior: 'instant' });
+          setTimeout(() => { isJumpingRef.current = false; }, 50);
+        } else if (newIndex >= 2 * segmentSize) {
+          isJumpingRef.current = true;
+          container.scrollTo({ top: container.scrollTop - segmentSize * vh, behavior: 'instant' });
+          setTimeout(() => { isJumpingRef.current = false; }, 50);
         }
-      });
+      }, 150); // Debounce delay in ms
     };
 
     const observer = new IntersectionObserver(observerCallback, {
       root: container,
-      threshold: 0.5, // Trigger when 50% of the item is visible
+      threshold: 0.7, // Trigger when 70% of the item is visible
     });
 
     sectionRefs.current.forEach((ref) => {
@@ -122,6 +129,7 @@ export default function ProductScroll({ products }) {
     });
 
     return () => {
+      if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
       sectionRefs.current.forEach((ref) => {
         if (ref) observer.unobserve(ref);
       });
@@ -209,7 +217,7 @@ export default function ProductScroll({ products }) {
           )}
 
           {/* IG-style action rail on the right */}
-          <div className="absolute right-4 top-1/2 -translate-y-1/2 flex flex-col items-center gap-6 z-30">
+          <div className="absolute right-4 top-[55%] -translate-y-1/2 flex flex-col items-center gap-6 z-30">
             {/* Like button */}
             <button
               type="button"
@@ -219,10 +227,10 @@ export default function ProductScroll({ products }) {
                 if (!likedIds.has(p.id)) triggerBurst(p.id);
                 toggleLike(p.id);
               }}
-              className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-black/30 hover:bg-black/50 backdrop-blur-sm text-white shadow-lg transition-colors"
+              className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-black/30 hover:bg-black/50 backdrop-blur-sm text-white shadow-lg transition-colors"
             >
               <Heart
-                className={`h-6 w-6 transition-all ${
+                className={`h-7 w-7 transition-all ${
                   likedIds.has(p.id)
                     ? "fill-red-500 text-red-500"
                     : "text-white"
@@ -235,9 +243,9 @@ export default function ProductScroll({ products }) {
               type="button"
               aria-label="Open reviews"
               onClick={() => setReviewsOpenFor(p.id)}
-              className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-black/30 hover:bg-black/50 backdrop-blur-sm text-white shadow-lg transition-colors"
+              className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-black/30 hover:bg-black/50 backdrop-blur-sm text-white shadow-lg transition-colors"
             >
-              <MessageCircle className="h-6 w-6" />
+              <MessageCircle className="h-7 w-7" />
             </button>
           </div>
 
