@@ -50,7 +50,6 @@ export function usePremiumScroll(products) {
         clearTimeout(debounceTimeoutRef.current);
       }
 
-      // Debounce the state update to avoid rapid changes while scrolling
       debounceTimeoutRef.current = setTimeout(() => {
         const newIndex = parseInt(intersectingEntry.target.dataset.index, 10);
         setActiveIndex(newIndex);
@@ -59,7 +58,7 @@ export function usePremiumScroll(products) {
 
     const observer = new window.IntersectionObserver(observerCallback, {
       root: container,
-      threshold: 0.8, // Trigger when 80% of the item is visible
+      threshold: 0.8,
     });
 
     sectionRefs.current.forEach((ref) => {
@@ -72,7 +71,7 @@ export function usePremiumScroll(products) {
         if (ref) observer.unobserve(ref);
       });
     };
-  }, [products.length]); // Depend only on the number of products
+  }, [products.length]);
 
   // Drag & Release Scrolling for Mobile
   useEffect(() => {
@@ -80,6 +79,7 @@ export function usePremiumScroll(products) {
     if (!el) return;
 
     let startY = 0;
+    let startX = 0; // NEW: track horizontal start
     let startTop = 0;
     let startTime = 0;
     let isDragging = false;
@@ -88,9 +88,10 @@ export function usePremiumScroll(products) {
     const onTouchStart = (e) => {
       isDragging = true;
       startY = e.touches[0].clientY;
+      startX = e.touches[0].clientX; // NEW: record horizontal start position
       startTop = el.scrollTop;
       startTime = Date.now();
-      el.style.scrollSnapType = "none"; // Disable snap while dragging
+      el.style.scrollSnapType = "none";
       if (animationFrameId) {
         cancelAnimationFrame(animationFrameId);
       }
@@ -98,12 +99,20 @@ export function usePremiumScroll(products) {
 
     const onTouchMove = (e) => {
       if (!isDragging) return;
+
       const updateScroll = () => {
         const currentY = e.touches[0].clientY;
+        const currentX = e.touches[0].clientX;
         const deltaY = currentY - startY;
-        el.scrollTop = startTop - deltaY;
+        const deltaX = currentX - startX;
+
+        // NEW: Only scroll if the gesture is more vertical than horizontal
+        if (Math.abs(deltaY) > Math.abs(deltaX)) {
+          el.scrollTop = startTop - deltaY;
+        }
         animationFrameId = null;
       };
+
       if (animationFrameId) {
         cancelAnimationFrame(animationFrameId);
       }
@@ -119,12 +128,10 @@ export function usePremiumScroll(products) {
       const dy = endTop - startTop;
       const velocity = dy / dt;
 
-      // Re-enable snap for the "release" animation
       el.style.scrollSnapType = "y mandatory";
       const currentPhysicalIndex = Math.round(startTop / vh);
       let targetPhysicalIndex = currentPhysicalIndex;
 
-      // Determine target based on flick velocity or drag distance
       const flickThreshold = 0.075;
       const distanceThreshold = vh * 0.05;
 
@@ -134,7 +141,6 @@ export function usePremiumScroll(products) {
         targetPhysicalIndex = dy > 0 ? currentPhysicalIndex + 1 : currentPhysicalIndex - 1;
       }
 
-      // Clamp the target index to be within bounds
       targetPhysicalIndex = Math.max(0, Math.min(products.length - 1, targetPhysicalIndex));
       
       const targetTop = targetPhysicalIndex * vh;
@@ -142,7 +148,7 @@ export function usePremiumScroll(products) {
     };
 
     el.addEventListener("touchstart", onTouchStart, { passive: true });
-    el.addEventListener("touchmove", onTouchMove, { passive: true });
+    el.addEventListener("touchmove", onTouchMove, { passive:true });
     el.addEventListener("touchend", onTouchEnd, { passive: true });
 
     return () => {
@@ -153,7 +159,7 @@ export function usePremiumScroll(products) {
         cancelAnimationFrame(animationFrameId);
       }
     };
-  }, [products.length]); // Also depend on products.length for clamping logic
+  }, [products.length]);
 
   return {
     containerRef,
