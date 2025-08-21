@@ -76,6 +76,38 @@ export function usePremiumScroll(products) {
     }
   }, [activeIndex, products.length, translateY, vh, gestureRef]);
 
+  // Enable wheel scroll on desktop
+useEffect(() => {
+  const el = containerRef.current;
+  if (!el) return;
+
+  const onWheel = (e) => {
+    if (e.deltaY > 0 && activeIndex < products.length - 1) {
+      setActiveIndex((i) => Math.min(i + 1, products.length - 1));
+    } else if (e.deltaY < 0 && activeIndex > 0) {
+      setActiveIndex((i) => Math.max(i - 1, 0));
+    }
+  };
+
+  el.addEventListener("wheel", onWheel, { passive: true });
+  return () => el.removeEventListener("wheel", onWheel);
+}, [activeIndex, products.length]);
+
+// Enable keyboard navigation (ArrowUp / ArrowDown)
+useEffect(() => {
+  const onKeyDown = (e) => {
+    if (e.key === "ArrowDown" && activeIndex < products.length - 1) {
+      setActiveIndex((i) => Math.min(i + 1, products.length - 1));
+    } else if (e.key === "ArrowUp" && activeIndex > 0) {
+      setActiveIndex((i) => Math.max(i - 1, 0));
+    }
+  };
+
+  window.addEventListener("keydown", onKeyDown);
+  return () => window.removeEventListener("keydown", onKeyDown);
+}, [activeIndex, products.length]);
+
+
   return {
     containerRef,
     activeIndex,
