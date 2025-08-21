@@ -42,8 +42,8 @@ def search_suggestions():
         
         suggestions = {
             "categories": categories,
-            # Popular terms can be hardcoded or derived if needed
             "popular_terms": ["phone", "laptop", "skin care", "groceries", "shoes"],
+            "examples": ["iPhone 9", "perfume", "watch", "motorcycle", "sunglasses"] # This line was added back
         }
         
         return jsonify(suggestions)
