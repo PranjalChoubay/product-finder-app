@@ -7,6 +7,7 @@ export default function ProductScroll({ products }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const segmentSize = products.length;
   const loopedProducts = segmentSize > 0 ? [...products, ...products, ...products] : [];
+  const isJumpingRef = useRef(false); // Ref to prevent scroll events during programmatic jumps
 
   // Likes persisted in localStorage shared with cards
   const [likedIds, setLikedIds] = useState(new Set());
@@ -65,11 +66,12 @@ export default function ProductScroll({ products }) {
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (!containerRef.current) return;
+      const vh = window.innerHeight;
       if (e.key === "ArrowDown") {
-        containerRef.current.scrollBy({ top: window.innerHeight, behavior: "smooth" });
+        containerRef.current.scrollBy({ top: vh, behavior: "smooth" });
       }
       if (e.key === "ArrowUp") {
-        containerRef.current.scrollBy({ top: -window.innerHeight, behavior: "smooth" });
+        containerRef.current.scrollBy({ top: -vh, behavior: "smooth" });
       }
     };
 
@@ -77,32 +79,55 @@ export default function ProductScroll({ products }) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  // Initialize and maintain infinite loop scroll position
+  // --- NEW: Intersection Observer for perfect scroll detection ---
   useEffect(() => {
     const container = containerRef.current;
     if (!container || segmentSize === 0) return;
 
     const vh = window.innerHeight;
-    // Start in the middle segment
+    
+    // Set initial scroll to the middle segment for infinite loop
     container.scrollTop = segmentSize * vh;
 
-    const handleScroll = () => {
-      const currentPage = Math.round(container.scrollTop / vh);
-      // Normalize index for UI indicators and animations
-      const normalized = ((currentPage % segmentSize) + segmentSize) % segmentSize;
-      setActiveIndex(normalized);
+    const observerCallback = (entries) => {
+      if (isJumpingRef.current) return; // Ignore observer events during a jump
 
-      // Seamless loop: if near edges, jump by one segment
-      if (currentPage < segmentSize) {
-        container.scrollTop += segmentSize * vh;
-      } else if (currentPage >= 2 * segmentSize) {
-        container.scrollTop -= segmentSize * vh;
-      }
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          const newIndex = parseInt(entry.target.dataset.index, 10);
+          const normalizedIndex = ((newIndex % segmentSize) + segmentSize) % segmentSize;
+          setActiveIndex(normalizedIndex);
+
+          // Logic for seamless infinite loop
+          if (newIndex < segmentSize) {
+            isJumpingRef.current = true;
+            container.scrollTop += segmentSize * vh;
+            setTimeout(() => { isJumpingRef.current = false; }, 100); // Reset jump flag
+          } else if (newIndex >= 2 * segmentSize) {
+            isJumpingRef.current = true;
+            container.scrollTop -= segmentSize * vh;
+            setTimeout(() => { isJumpingRef.current = false; }, 100); // Reset jump flag
+          }
+        }
+      });
     };
 
-    container.addEventListener("scroll", handleScroll, { passive: true });
-    return () => container.removeEventListener("scroll", handleScroll);
+    const observer = new IntersectionObserver(observerCallback, {
+      root: container,
+      threshold: 0.5, // Trigger when 50% of the item is visible
+    });
+
+    sectionRefs.current.forEach((ref) => {
+      if (ref) observer.observe(ref);
+    });
+
+    return () => {
+      sectionRefs.current.forEach((ref) => {
+        if (ref) observer.unobserve(ref);
+      });
+    };
   }, [segmentSize]);
+
 
   // --- Reviews Drawer ---
   const [reviewsOpenFor, setReviewsOpenFor] = useState(null);
@@ -150,8 +175,6 @@ export default function ProductScroll({ products }) {
         .heart-burst { animation: heart-burst 550ms ease-out forwards; }
       `}</style>
 
-      {/* Background kept pure black for cinematic feel */}
-
       {loopedProducts.map((p, i) => (
         <section
           key={i}
@@ -174,7 +197,7 @@ export default function ProductScroll({ products }) {
                 "https://via.placeholder.com/1200x1600/0B1220/FFFFFF?text=No+Image")
             }
             className={`object-contain max-h-full max-w-full h-[80vh] transition-opacity duration-700 ${
-              activeIndex === i ? "opacity-100" : "opacity-70"
+              activeIndex === ((i % segmentSize) + segmentSize) % segmentSize ? "opacity-100" : "opacity-70"
             }`}
           />
 
@@ -185,34 +208,34 @@ export default function ProductScroll({ products }) {
             </div>
           )}
 
-          {/* IG-style action rail on the right (slightly below middle) */}
-          <div className="absolute right-14 md:right-16 top-1/2 translate-y-6 flex flex-col items-center gap-4 z-30">
-            {/* Like button (button stays dark; heart fills red when liked) */}
+          {/* IG-style action rail on the right */}
+          <div className="absolute right-4 top-1/2 -translate-y-1/2 flex flex-col items-center gap-6 z-30">
+            {/* Like button */}
             <button
               type="button"
               aria-label="Like product"
               aria-pressed={likedIds.has(p.id)}
               onClick={() => {
-                if (!likedIds.has(p.id)) triggerBurst(p.id); // also show big heart when liking via button
+                if (!likedIds.has(p.id)) triggerBurst(p.id);
                 toggleLike(p.id);
               }}
-              className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-slate-700 hover:bg-slate-600 text-gray-200 shadow-md transition-colors"
+              className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-black/30 hover:bg-black/50 backdrop-blur-sm text-white shadow-lg transition-colors"
             >
               <Heart
-                className={`h-6 w-6 ${
+                className={`h-6 w-6 transition-all ${
                   likedIds.has(p.id)
                     ? "fill-red-500 text-red-500"
-                    : "text-gray-200"
+                    : "text-white"
                 } ${likePopId === p.id ? "like-pop" : ""}`}
               />
             </button>
 
-            {/* Reviews button (opens bottom drawer) */}
+            {/* Reviews button */}
             <button
               type="button"
               aria-label="Open reviews"
               onClick={() => setReviewsOpenFor(p.id)}
-              className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-slate-700 hover:bg-slate-600 text-gray-200 shadow-md transition-colors"
+              className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-black/30 hover:bg-black/50 backdrop-blur-sm text-white shadow-lg transition-colors"
             >
               <MessageCircle className="h-6 w-6" />
             </button>
@@ -234,36 +257,25 @@ export default function ProductScroll({ products }) {
                 <p className="text-amber-400 font-bold text-3xl">${p.price?.toFixed(2) || "N/A"}</p>
                 <span className="text-xs text-gray-400">incl. taxes</span>
               </div>
-              <div className="mt-6 flex flex-wrap gap-3">
-                <button className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-amber-500 hover:bg-amber-600 text-white font-medium shadow-md">
+              {/* Forcefully aligned buttons for mobile */}
+              <div className="mt-6 flex flex-nowrap items-center gap-2 sm:gap-3">
+                <button className="inline-flex flex-1 sm:flex-none items-center justify-center gap-2 px-4 py-2 sm:px-5 sm:py-2.5 rounded-full bg-amber-500 hover:bg-amber-600 text-white text-xs sm:text-sm font-medium shadow-md">
                   <ShoppingCart className="h-4 w-4" />
-                  Buy Now
+                  <span className="hidden sm:inline">Buy Now</span>
                 </button>
-                <button className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-slate-700 hover:bg-slate-600 text-gray-200">
+                <button className="inline-flex items-center justify-center gap-2 px-4 py-2 sm:px-5 sm:py-2.5 rounded-full bg-slate-700 hover:bg-slate-600 text-gray-200 text-xs sm:text-sm">
                   <Plus className="h-4 w-4" />
-                  Add to Cart
+                  <span className="hidden sm:inline">Add to Cart</span>
                 </button>
-                <button className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-slate-700 hover:bg-slate-600 text-gray-200">
+                <button className="inline-flex items-center justify-center gap-2 px-4 py-2 sm:px-5 sm:py-2.5 rounded-full bg-slate-700 hover:bg-slate-600 text-gray-200 text-xs sm:text-sm">
                   <Eye className="h-4 w-4" />
-                  View Details
+                  <span className="hidden sm:inline">View Details</span>
                 </button>
               </div>
             </div>
           </div>
         </section>
       ))}
-
-      {/* Vertical progress dots (nudged a bit away from action rail) */}
-      <div className="pointer-events-none fixed right-4 top-1/2 -translate-y-1/2 z-20 hidden md:flex flex-col gap-3">
-        {products.map((_, i) => (
-          <span
-            key={i}
-            className={`h-2.5 w-2.5 rounded-full border border-amber-500/50 transition-all ${
-              activeIndex === i ? "bg-amber-400 shadow-[0_0_0_4px_rgba(245,158,11,0.25)]" : "bg-white/30"
-            }`}
-          />
-        ))}
-      </div>
 
       {/* Scroll hint */}
       {activeIndex === 0 && (
