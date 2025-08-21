@@ -78,7 +78,7 @@ export function usePremiumScroll(products) {
     const el = containerRef.current;
     if (!el) return;
     
-    let scrollEndTimeout = null;
+    let scrollStopTimer = null;
     let startY = 0;
     let startX = 0;
     let startTop = 0;
@@ -86,10 +86,24 @@ export function usePremiumScroll(products) {
     let isDragging = false;
     let animationFrameId = null;
 
+    // NEW: This function runs when scrolling stops and re-enables CSS snapping.
+    const onScrollStop = () => {
+      if (el) {
+        el.style.scrollSnapType = 'y mandatory';
+      }
+    };
+    
+    // NEW: A scroll listener that resets a timer. When the timer finally runs,
+    // we know the scrolling has stopped.
+    const handleScroll = () => {
+      clearTimeout(scrollStopTimer);
+      scrollStopTimer = setTimeout(onScrollStop, 150);
+    };
+    
+    el.addEventListener('scroll', handleScroll);
+
     const onTouchStart = (e) => {
-      // Clear any pending timeouts to prevent snap from re-enabling during a new touch
-      if (scrollEndTimeout) clearTimeout(scrollEndTimeout);
-      
+      clearTimeout(scrollStopTimer);
       isDragging = true;
       startY = e.touches[0].clientY;
       startX = e.touches[0].clientX;
@@ -130,8 +144,6 @@ export function usePremiumScroll(products) {
       const endTop = el.scrollTop;
       const dy = endTop - startTop;
       const velocity = dy / dt;
-
-      // NOTE: We DO NOT re-enable scroll-snap-type here to avoid conflicts.
       
       const currentPhysicalIndex = Math.round(startTop / vh);
       let targetPhysicalIndex = currentPhysicalIndex;
@@ -149,23 +161,22 @@ export function usePremiumScroll(products) {
       
       const targetTop = targetPhysicalIndex * vh;
       el.scrollTo({ top: targetTop, behavior: "smooth" });
-
-      // NEW: Re-enable snap type only AFTER the scroll animation has had time to finish.
-      scrollEndTimeout = setTimeout(() => {
-        el.style.scrollSnapType = "y mandatory";
-      }, 500); // 500ms is a safe duration for most smooth scroll animations
+      
+      // REMOVED: The unreliable setTimeout from here. The scroll listener now handles this.
     };
 
     el.addEventListener("touchstart", onTouchStart, { passive: true });
     el.addEventListener("touchmove", onTouchMove, { passive:true });
     el.addEventListener("touchend", onTouchEnd, { passive: true });
 
+    // Cleanup function for the effect
     return () => {
+      el.removeEventListener('scroll', handleScroll);
       el.removeEventListener("touchstart", onTouchStart);
       el.removeEventListener("touchmove", onTouchMove);
       el.removeEventListener("touchend", onTouchEnd);
       if (animationFrameId) cancelAnimationFrame(animationFrameId);
-      if (scrollEndTimeout) clearTimeout(scrollEndTimeout);
+      if (scrollStopTimer) clearTimeout(scrollStopTimer);
     };
   }, [products.length]);
 
