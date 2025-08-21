@@ -17,6 +17,9 @@ export function usePremiumScroll(products) {
   // Keep a reactive viewport height so translations/snap thresholds adapt when mobile chrome/navbar shows/hides
   const [vh, setVh] = useState(typeof window !== 'undefined' ? window.innerHeight : 800);
 
+  const [isScrolling, setIsScrolling] = useState(false);
+
+  
   useEffect(() => {
     const onResize = () => setVh(window.innerHeight);
     onResize();
@@ -82,16 +85,19 @@ useEffect(() => {
   if (!el) return;
 
   const onWheel = (e) => {
+    if (isScrolling) return; // ignore if already scrolling
+
     if (e.deltaY > 0 && activeIndex < products.length - 1) {
       setActiveIndex((i) => Math.min(i + 1, products.length - 1));
     } else if (e.deltaY < 0 && activeIndex > 0) {
       setActiveIndex((i) => Math.max(i - 1, 0));
     }
+    setTimeout(() => setIsScrolling(false), 300);
   };
 
   el.addEventListener("wheel", onWheel, { passive: true });
   return () => el.removeEventListener("wheel", onWheel);
-}, [activeIndex, products.length]);
+}, [activeIndex, products.length, isScrolling]);
 
 // Enable keyboard navigation (ArrowUp / ArrowDown)
 useEffect(() => {
