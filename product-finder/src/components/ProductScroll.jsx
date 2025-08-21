@@ -294,7 +294,7 @@ export default function ProductScroll({ products }) {
             )}
 
             {/* IG-style action rail on the right */}
-            <div className="absolute right-4 top-[60%] -translate-y-1/2 flex flex-col items-center gap-3 sm:gap-4 z-30">
+            <div className="absolute right-4 top-[70%] -translate-y-1/2 flex flex-col items-center gap-3 sm:gap-4 z-30">
               {/* Like button */}
               <button
                 type="button"
