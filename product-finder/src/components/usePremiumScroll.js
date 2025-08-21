@@ -133,7 +133,7 @@ export function usePremiumScroll(products) {
       let targetPhysicalIndex = currentPhysicalIndex;
 
       const flickThreshold = 0.075;
-      const distanceThreshold = vh * 0.05;
+      const distanceThreshold = vh * 0.03;
 
       if (Math.abs(velocity) > flickThreshold) {
         targetPhysicalIndex = velocity > 0 ? currentPhysicalIndex + 1 : currentPhysicalIndex - 1;
