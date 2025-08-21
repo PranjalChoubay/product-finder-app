@@ -1,14 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ShoppingCart, Plus, Eye, Heart, MessageCircle, X, Share2 } from "lucide-react";
+import { usePremiumScroll } from "./usePremiumScroll";
 
 export default function ProductScroll({ products }) {
-  const containerRef = useRef(null);
-  const sectionRefs = useRef([]);
-  const [activeIndex, setActiveIndex] = useState(0);
-  const segmentSize = products.length;
-  const loopedProducts = segmentSize > 0 ? [...products, ...products, ...products] : [];
-  const isJumpingRef = useRef(false);
-  const debounceTimeoutRef = useRef(null);
+  // Use the custom hook for all scroll logic
+  const {
+    containerRef,
+    sectionRefs,
+    activeIndex,
+    setActiveIndex,
+    loopedProducts,
+    segmentSize,
+  } = usePremiumScroll(products);
 
   // Likes persisted in localStorage shared with cards
   const [likedIds, setLikedIds] = useState(new Set());
@@ -75,196 +78,6 @@ export default function ProductScroll({ products }) {
     }
     return map;
   }, [products]);
-
-  // Keyboard navigation (desktop/testing convenience)
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (!containerRef.current) return;
-      const vh = window.innerHeight;
-      if (e.key === "ArrowDown") {
-        containerRef.current.scrollBy({ top: vh, behavior: "smooth" });
-      }
-      if (e.key === "ArrowUp") {
-        containerRef.current.scrollBy({ top: -vh, behavior: "smooth" });
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
-
-  // --- Debounced Intersection Observer + snap-stop to avoid skipping ---
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container || segmentSize === 0) return;
-
-    const vh = window.innerHeight;
-
-    // Set initial scroll to the middle segment for infinite loop
-    container.scrollTop = segmentSize * vh;
-
-    const observerCallback = (entries) => {
-      if (isJumpingRef.current) return;
-
-      const intersectingEntry = entries.find((entry) => entry.isIntersecting);
-      if (!intersectingEntry) return;
-
-      if (debounceTimeoutRef.current) {
-        clearTimeout(debounceTimeoutRef.current);
-      }
-
-      debounceTimeoutRef.current = setTimeout(() => {
-        const newIndex = parseInt(intersectingEntry.target.dataset.index, 10);
-        const normalizedIndex = ((newIndex % segmentSize) + segmentSize) % segmentSize;
-        setActiveIndex(normalizedIndex);
-
-        // Seamless infinite loop: keep user in the middle segment
-        if (newIndex < segmentSize) {
-          isJumpingRef.current = true;
-          container.style.transition = "none";
-          container.style.pointerEvents = "none";
-          requestAnimationFrame(() => {
-            container.scrollTo({ top: container.scrollTop + segmentSize * vh, behavior: "auto" });
-            requestAnimationFrame(() => {
-              container.style.transition = "";
-              container.style.pointerEvents = "";
-              isJumpingRef.current = false;
-            });
-          });
-        } else if (newIndex >= 2 * segmentSize) {
-          isJumpingRef.current = true;
-          container.style.transition = "none";
-          container.style.pointerEvents = "none";
-          requestAnimationFrame(() => {
-            container.scrollTo({ top: container.scrollTop - segmentSize * vh, behavior: "auto" });
-            requestAnimationFrame(() => {
-              container.style.transition = "";
-              container.style.pointerEvents = "";
-              isJumpingRef.current = false;
-            });
-          });
-        }
-      }, 120);
-    };
-
-    const observer = new IntersectionObserver(observerCallback, {
-      root: container,
-      threshold: 0.9,
-    });
-
-    sectionRefs.current.forEach((ref) => {
-      if (ref) observer.observe(ref);
-    });
-
-    return () => {
-      if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
-      sectionRefs.current.forEach((ref) => {
-        if (ref) observer.unobserve(ref);
-      });
-    };
-  }, [segmentSize]);
-
-  // --- NEW: Perfect "Drag & Release" Scrolling for Mobile ---
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-
-    let startY = 0;
-    let startTop = 0;
-    let startTime = 0;
-    let isDragging = false;
-    let animationFrameId = null;
-
-    const onTouchStart = (e) => {
-      isDragging = true;
-      startY = e.touches[0].clientY;
-      startTop = el.scrollTop;
-      startTime = Date.now();
-      // Disable CSS snapping during manual drag for direct control
-      el.style.scrollSnapType = "none";
-      if (animationFrameId) {
-        cancelAnimationFrame(animationFrameId);
-      }
-    };
-
-    const onTouchMove = (e) => {
-      if (!isDragging) return;
-      
-      const updateScroll = () => {
-        const currentY = e.touches[0].clientY;
-        const deltaY = currentY - startY;
-        el.scrollTop = startTop - deltaY;
-        animationFrameId = null;
-      };
-      
-      if (animationFrameId) {
-        cancelAnimationFrame(animationFrameId);
-      }
-      animationFrameId = requestAnimationFrame(updateScroll);
-    };
-
-    const onTouchEnd = () => {
-      if (!isDragging) return;
-      isDragging = false;
-      const vh = window.innerHeight;
-      const dt = Date.now() - startTime;
-      const endTop = el.scrollTop;
-      const dy = endTop - startTop;
-      const velocity = dy / dt;
-
-      // Re-enable snapping for the final animation
-      el.style.scrollSnapType = "y mandatory";
-
-      // Determine target slide based on velocity and distance
-      const currentPhysicalIndex = Math.round(startTop / vh);
-      let targetPhysicalIndex = currentPhysicalIndex;
-      
-      const flickThreshold = 0.09; // even higher sensitivity
-      const distanceThreshold = vh * 0.05; // even higher sensitivity
-
-      if (Math.abs(velocity) > flickThreshold) {
-        // It's a flick, move to next/prev
-        targetPhysicalIndex = velocity > 0 ? currentPhysicalIndex + 1 : currentPhysicalIndex - 1;
-      } else if (Math.abs(dy) > distanceThreshold) {
-        // It's a slow drag past the threshold
-        targetPhysicalIndex = dy > 0 ? currentPhysicalIndex + 1 : currentPhysicalIndex - 1;
-      }
-      // Otherwise, it snaps back to the current slide
-
-      const targetTop = targetPhysicalIndex * vh;
-      el.scrollTo({ top: targetTop, behavior: "smooth" });
-    };
-
-    el.addEventListener("touchstart", onTouchStart, { passive: true });
-    el.addEventListener("touchmove", onTouchMove, { passive: true });
-    el.addEventListener("touchend", onTouchEnd, { passive: true });
-
-    return () => {
-      el.removeEventListener("touchstart", onTouchStart);
-      el.removeEventListener("touchmove", onTouchMove);
-      el.removeEventListener("touchend", onTouchEnd);
-      if (animationFrameId) {
-        cancelAnimationFrame(animationFrameId);
-      }
-    };
-  }, []);
-
-  // Preload images for previous and next product (fix flicker)
-  useEffect(() => {
-    if (!loopedProducts.length) return;
-    const total = loopedProducts.length;
-    const i = segmentSize + activeIndex; // middle segment
-    const prev = loopedProducts[i - 1];
-    const next = loopedProducts[i + 1];
-    if (prev && prev.thumbnail) {
-      const imgPrev = new window.Image();
-      imgPrev.src = prev.thumbnail;
-    }
-    if (next && next.thumbnail) {
-      const imgNext = new window.Image();
-      imgNext.src = next.thumbnail;
-    }
-  }, [activeIndex, loopedProducts, segmentSize]);
 
   // --- Reviews Drawer ---
   const [reviewsOpenFor, setReviewsOpenFor] = useState(null);
@@ -334,7 +147,6 @@ export default function ProductScroll({ products }) {
       {loopedProducts.map((p, i) => {
         const { likes = 0, reviews = 0 } = seededCounts.get(p.id) || {};
         const displayLikes = likes + (likedIds.has(p.id) ? 1 : 0);
-
         return (
           <section
             key={i}
@@ -357,18 +169,14 @@ export default function ProductScroll({ products }) {
               src={p.thumbnail}
               alt={p.title}
               onError={(e) => (e.currentTarget.src = "https://via.placeholder.com/1200x1600/0B1220/FFFFFF?text=No+Image")}
-              className={`object-contain max-h-full max-w-full h-[80vh] transition-opacity duration-700 ${
-                activeIndex === ((i % segmentSize) + segmentSize) % segmentSize ? "opacity-100" : "opacity-70"
-              }`}
+              className="object-contain max-h-full max-w-full h-[80vh]"
             />
-
             {/* IG-style red heart burst (center) */}
             {burstProductId === p.id && (
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center z-10">
                 <Heart className="h-28 w-28 text-red-500 fill-red-500 heart-burst drop-shadow-[0_0_12px_rgba(239,68,68,0.6)]" />
               </div>
             )}
-
             {/* IG-style action rail on the right */}
             <div className="absolute right-4 top-[70%] -translate-y-1/2 flex flex-col items-center gap-3 sm:gap-4 z-30">
               {/* Like button */}
@@ -389,7 +197,6 @@ export default function ProductScroll({ products }) {
                 />
               </button>
               <span className="text-[11px] leading-none text-white/90">{displayLikes.toLocaleString()}</span>
-
               {/* Reviews button */}
               <button
                 type="button"
@@ -400,7 +207,6 @@ export default function ProductScroll({ products }) {
                 <MessageCircle className="h-8 w-8" />
               </button>
               <span className="text-[11px] leading-none text-white/90">{reviews.toLocaleString()}</span>
-
               {/* NEW: Share button */}
               <button
                 type="button"
@@ -411,10 +217,8 @@ export default function ProductScroll({ products }) {
                 <Share2 className="h-8 w-8" />
               </button>
             </div>
-
             {/* Overlay gradient at bottom */}
             <div className="pointer-events-none absolute inset-x-0 bottom-0 h-64 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-
             {/* Text overlay bottom */}
             <div className="absolute inset-x-0 bottom-0 z-10">
               <div className="text-white px-4 pb-8 md:px-8">
@@ -424,7 +228,6 @@ export default function ProductScroll({ products }) {
                   <p className="text-amber-400 font-bold text-3xl">${p.price?.toFixed(2) || "N/A"}</p>
                   <span className="text-xs text-gray-400">incl. taxes</span>
                 </div>
-
                 {/* BIGGER mobile buttons */}
                 <div className="mt-6 flex flex-nowrap items-center gap-2 sm:gap-3">
                   <button className="inline-flex flex-1 sm:flex-none items-center justify-center gap-2 px-5 py-3 sm:px-5 sm:py-2.5 rounded-full bg-amber-500 hover:bg-amber-600 text-white text-sm sm:text-sm font-medium shadow-md min-h-[50px]">
@@ -445,7 +248,6 @@ export default function ProductScroll({ products }) {
           </section>
         );
       })}
-
       {/* Scroll hint */}
       {activeIndex === 0 && (
         <div className="pointer-events-none absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center text-white/80">
@@ -453,14 +255,12 @@ export default function ProductScroll({ products }) {
           <ChevronDown className="h-5 w-5 animate-bounce" />
         </div>
       )}
-
       {/* Tiny toast for share fallback */}
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-black/80 text-white text-sm px-3 py-2 rounded-full shadow-lg">
           {toast}
         </div>
       )}
-
       {/* Reviews Drawer (bottom sheet) */}
       {reviewsOpenFor && (
         <>
