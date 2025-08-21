@@ -3,17 +3,14 @@ import { ChevronDown, ShoppingCart, Plus, Eye, Heart, MessageCircle, X, Share2 }
 import { usePremiumScroll } from "./usePremiumScroll";
 
 export default function ProductScroll({ products }) {
-  // Use the custom hook for all scroll logic
+  // Use the simplified custom hook for scroll logic
   const {
     containerRef,
     sectionRefs,
     activeIndex,
-    setActiveIndex,
-    loopedProducts,
-    segmentSize,
   } = usePremiumScroll(products);
 
-  // Likes persisted in localStorage shared with cards
+  // Likes persisted in localStorage
   const [likedIds, setLikedIds] = useState(new Set());
   useEffect(() => {
     try {
@@ -23,7 +20,7 @@ export default function ProductScroll({ products }) {
     } catch {}
   }, []);
 
-  // small pop animation on heart icon
+  // Small pop animation on heart icon
   const [likePopId, setLikePopId] = useState(null);
   const toggleLike = (id) => {
     setLikedIds((prev) => {
@@ -44,7 +41,7 @@ export default function ProductScroll({ products }) {
     });
   };
 
-  // Double-tap like red heart burst (center)
+  // Double-tap like red heart burst
   const [burstProductId, setBurstProductId] = useState(null);
   const triggerBurst = (id) => {
     setBurstProductId(id);
@@ -53,7 +50,7 @@ export default function ProductScroll({ products }) {
     }, 550);
   };
 
-  // Touch double-tap detection per IG style
+  // Touch double-tap detection
   const lastTapRef = useRef({ time: 0, id: null });
   const handleTapLike = (id) => {
     const now = Date.now();
@@ -65,21 +62,21 @@ export default function ProductScroll({ products }) {
     lastTapRef.current = { time: now, id };
   };
 
-  // --- Stable seeded counts (likes & reviews) per product ---
+  // Stable seeded counts (likes & reviews) per product
   const seededCounts = useMemo(() => {
     const map = new Map();
     for (const p of products) {
       const s = String(p.id ?? p.title ?? "id");
       let h = 0;
       for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 10000;
-      const likes = 120 + (h % 880); // 120–999
-      const reviews = 7 + Math.floor(h / 7) % 193; // 7–199
+      const likes = 120 + (h % 880);
+      const reviews = 7 + Math.floor(h / 7) % 193;
       map.set(p.id, { likes, reviews });
     }
     return map;
   }, [products]);
 
-  // --- Reviews Drawer ---
+  // Reviews Drawer state and effect
   const [reviewsOpenFor, setReviewsOpenFor] = useState(null);
   useEffect(() => {
     if (!reviewsOpenFor) return;
@@ -88,14 +85,13 @@ export default function ProductScroll({ products }) {
     return () => window.removeEventListener("keydown", onEsc);
   }, [reviewsOpenFor]);
 
-  // simple mock reviews
   const mockReviews = [
     { user: "Aditi", rating: 5, text: "Great quality, totally worth it!" },
     { user: "Rohit", rating: 4, text: "Looks premium, delivery was fast." },
     { user: "Maya", rating: 4, text: "Exactly as shown. Good value." },
   ];
 
-  // --- Share handler + tiny toast ---
+  // Share handler + toast notification
   const [toast, setToast] = useState("");
   const shareProduct = async (p) => {
     const url = (p.url || window.location.href) + `#product-${p.id}`;
@@ -107,9 +103,7 @@ export default function ProductScroll({ products }) {
         setToast("Link copied to clipboard");
         setTimeout(() => setToast(""), 1500);
       }
-    } catch {
-      /* user cancelled or unsupported */
-    }
+    } catch {}
   };
 
   if (products.length === 0) {
@@ -123,63 +117,42 @@ export default function ProductScroll({ products }) {
       ref={containerRef}
       className="relative h-screen w-full overflow-y-scroll snap-y snap-mandatory overscroll-contain touch-pan-y scrollbar-hide bg-black"
     >
-      {/* Local styles for IG-like heart animations */}
+      {/* Styles for heart animations */}
       <style>{`
         @keyframes like-pop { 0% { transform: scale(0.9); } 45% { transform: scale(1.25); } 100% { transform: scale(1); } }
         .like-pop { animation: like-pop 280ms cubic-bezier(0.22, 1, 0.36, 1); }
         @keyframes heart-burst { 0% { transform: scale(0.8); opacity: 0; } 20% { opacity: 1; } 100% { transform: scale(1.4); opacity: 0; } }
         .heart-burst { animation: heart-burst 550ms cubic-bezier(0.22, 1, 0.36, 1) forwards; }
-        /* Premium scroll: hardware acceleration & smooth fade/scale */
-        .premium-section {
-          will-change: transform, opacity;
-          transition: opacity 0.5s cubic-bezier(0.22, 1, 0.36, 1), transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
-        }
-        .premium-section.inactive {
-          opacity: 0.7;
-          transform: scale(0.97);
-        }
-        .premium-section.active {
-          opacity: 1;
-          transform: scale(1);
-        }
       `}</style>
 
-      {loopedProducts.map((p, i) => {
+      {/* Map directly over the original products array */}
+      {products.map((p, i) => {
         const { likes = 0, reviews = 0 } = seededCounts.get(p.id) || {};
         const displayLikes = likes + (likedIds.has(p.id) ? 1 : 0);
         return (
           <section
-            key={i}
+            key={p.id || i} // Use a stable key
             data-index={i}
             ref={(el) => (sectionRefs.current[i] = el)}
-            className={`premium-section h-screen w-full snap-start snap-always flex items-center justify-center bg-black ${
-              activeIndex === ((i % segmentSize) + segmentSize) % segmentSize ? "active" : "inactive"
-            }`}
+            className="h-screen w-full snap-start snap-always flex items-center justify-center bg-black"
             onDoubleClick={() => {
-              const id = p.id;
-              if (!likedIds.has(id)) toggleLike(id);
-              triggerBurst(id);
+              if (!likedIds.has(p.id)) toggleLike(p.id);
+              triggerBurst(p.id);
             }}
-            onTouchEndCapture={(e) => {
-              handleTapLike(p.id);
-            }}
+            onTouchEndCapture={() => handleTapLike(p.id)}
           >
-            {/* Product image centered */}
             <img
               src={p.thumbnail}
               alt={p.title}
               onError={(e) => (e.currentTarget.src = "https://via.placeholder.com/1200x1600/0B1220/FFFFFF?text=No+Image")}
               className="object-contain max-h-full max-w-full h-[80vh]"
             />
-            {/* IG-style red heart burst (center) */}
             {burstProductId === p.id && (
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center z-10">
                 <Heart className="h-28 w-28 text-red-500 fill-red-500 heart-burst drop-shadow-[0_0_12px_rgba(239,68,68,0.6)]" />
               </div>
             )}
-            {/* IG-style action rail on the right */}
             <div className="absolute right-4 top-[70%] -translate-y-1/2 flex flex-col items-center gap-3 sm:gap-4 z-30">
-              {/* Like button */}
               <button
                 type="button"
                 aria-label="Like product"
@@ -197,7 +170,6 @@ export default function ProductScroll({ products }) {
                 />
               </button>
               <span className="text-[11px] leading-none text-white/90">{displayLikes.toLocaleString()}</span>
-              {/* Reviews button */}
               <button
                 type="button"
                 aria-label="Open reviews"
@@ -207,7 +179,6 @@ export default function ProductScroll({ products }) {
                 <MessageCircle className="h-8 w-8" />
               </button>
               <span className="text-[11px] leading-none text-white/90">{reviews.toLocaleString()}</span>
-              {/* NEW: Share button */}
               <button
                 type="button"
                 aria-label="Share product"
@@ -217,9 +188,7 @@ export default function ProductScroll({ products }) {
                 <Share2 className="h-8 w-8" />
               </button>
             </div>
-            {/* Overlay gradient at bottom */}
             <div className="pointer-events-none absolute inset-x-0 bottom-0 h-64 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-            {/* Text overlay bottom */}
             <div className="absolute inset-x-0 bottom-0 z-10">
               <div className="text-white px-4 pb-8 md:px-8">
                 <h2 className="text-2xl sm:text-3xl md:text-4xl font-semibold leading-snug line-clamp-2">{p.title}</h2>
@@ -228,7 +197,6 @@ export default function ProductScroll({ products }) {
                   <p className="text-amber-400 font-bold text-3xl">${p.price?.toFixed(2) || "N/A"}</p>
                   <span className="text-xs text-gray-400">incl. taxes</span>
                 </div>
-                {/* BIGGER mobile buttons */}
                 <div className="mt-6 flex flex-nowrap items-center gap-2 sm:gap-3">
                   <button className="inline-flex flex-1 sm:flex-none items-center justify-center gap-2 px-5 py-3 sm:px-5 sm:py-2.5 rounded-full bg-amber-500 hover:bg-amber-600 text-white text-sm sm:text-sm font-medium shadow-md min-h-[50px]">
                     <ShoppingCart className="h-6 w-6 sm:h-5 sm:w-5" />
@@ -248,25 +216,21 @@ export default function ProductScroll({ products }) {
           </section>
         );
       })}
-      {/* Scroll hint */}
-      {activeIndex === 0 && (
+      {/* Scroll hint, shown only on the first item and if there's more than one product */}
+      {activeIndex === 0 && products.length > 1 && (
         <div className="pointer-events-none absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center text-white/80">
           <span className="text-xs mb-1">Scroll</span>
           <ChevronDown className="h-5 w-5 animate-bounce" />
         </div>
       )}
-      {/* Tiny toast for share fallback */}
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-black/80 text-white text-sm px-3 py-2 rounded-full shadow-lg">
           {toast}
         </div>
       )}
-      {/* Reviews Drawer (bottom sheet) */}
       {reviewsOpenFor && (
         <>
-          {/* Dim background */}
           <div className="fixed inset-0 bg-black/60 z-40" onClick={() => setReviewsOpenFor(null)} />
-          {/* Sheet */}
           <div className="fixed inset-x-0 bottom-0 z-50 bg-slate-900 border-t border-slate-700 rounded-t-2xl max-h-[70vh] overflow-y-auto shadow-2xl">
             <div className="sticky top-0 bg-slate-900/95 backdrop-blur-sm p-4 border-b border-slate-800 rounded-t-2xl flex items-center justify-between">
               <div className="h-1.5 w-12 bg-slate-700 rounded-full mx-auto absolute left-1/2 -translate-x-1/2 -mt-3" />
@@ -298,7 +262,6 @@ export default function ProductScroll({ products }) {
                   </li>
                 ))}
               </ul>
-              {/* Placeholder input (UI only) */}
               <div className="mt-4 border-t border-slate-800 pt-4">
                 <div className="flex gap-2">
                   <input
