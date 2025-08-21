@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ShoppingCart, Plus, Eye, Heart, MessageCircle, X, Share2 } from "lucide-react";
-import { usePremiumScroll } from "./usePremiumScroll"; // The gesture-based hook (updated)
+import { ShoppingCart, Plus, Eye, Heart, MessageCircle, Share2 } from "lucide-react";
+import { usePremiumScroll } from "./usePremiumScroll";
 
 export default function ProductScroll({ products }) {
-  // --- same state/logic as before (likes, bursts, reviews, etc) ---
   const [likedIds, setLikedIds] = useState(new Set());
   useEffect(() => {
     try {
@@ -66,7 +65,7 @@ export default function ProductScroll({ products }) {
       };
     });
   }, [products]);
-  
+
   const [reviewsOpenFor, setReviewsOpenFor] = useState(null);
   useEffect(() => {
     if (!reviewsOpenFor) return;
@@ -74,12 +73,6 @@ export default function ProductScroll({ products }) {
     window.addEventListener("keydown", onEsc);
     return () => window.removeEventListener("keydown", onEsc);
   }, [reviewsOpenFor]);
-
-  const mockReviews = [
-    { user: "Aditi", rating: 5, text: "Great quality, totally worth it!" },
-    { user: "Rohit", rating: 4, text: "Looks premium, delivery was fast." },
-    { user: "Maya", rating: 4, text: "Exactly as shown. Good value." },
-  ];
 
   const [toast, setToast] = useState("");
   const shareProduct = async (p) => {
@@ -95,10 +88,8 @@ export default function ProductScroll({ products }) {
     } catch {}
   };
 
-  // --- Fix for mobile viewport (100vh on iOS) ---
   useEffect(() => {
     const setVh = () => {
-      // set a --vh CSS variable so we can reliably use true viewport height on mobile browsers
       document.documentElement.style.setProperty('--vh', `${window.innerHeight * 0.01}px`);
     };
     setVh();
@@ -106,7 +97,6 @@ export default function ProductScroll({ products }) {
     return () => window.removeEventListener('resize', setVh);
   }, []);
 
-  // --- position the right-side action stack slightly higher on very short screens ---
   const [actionTop, setActionTop] = useState('70%');
   useEffect(() => {
     const calc = () => {
@@ -120,7 +110,6 @@ export default function ProductScroll({ products }) {
     return () => window.removeEventListener('resize', calc);
   }, []);
 
-  // Use the (updated) gesture hook
   const { containerRef, activeIndex, wrapperProps } = usePremiumScroll(productsWithData);
 
   const renderedProducts = useMemo(() => {
@@ -138,17 +127,15 @@ export default function ProductScroll({ products }) {
     return items;
   }, [activeIndex, productsWithData]);
 
-
   if (products.length === 0) {
-    return <div className="flex items-center justify-center h-screen text-gray-400">No products found.</div>;
+    return <div className="flex items-center justify-center h-screen text-gray-500">No products found.</div>;
   }
 
   return (
     <div
       ref={containerRef}
-      className="relative w-full bg-black overflow-hidden"
+      className="relative w-full bg-white overflow-hidden"
       style={{
-        // use the --vh CSS variable so 100% height equals the true viewport height on mobile (fixes iOS issues)
         height: 'calc(var(--vh, 1vh) * 100)',
         WebkitOverflowScrolling: 'touch',
         touchAction: 'pan-y',
@@ -160,7 +147,7 @@ export default function ProductScroll({ products }) {
         @keyframes heart-burst { 0% { transform: scale(0.8); opacity: 0; } 20% { opacity: 1; } 100% { transform: scale(1.4); opacity: 0; } }
         .heart-burst { animation: heart-burst 550ms cubic-bezier(0.22, 1, 0.36, 1) forwards; }
       `}</style>
-      
+
       <div className="relative h-full w-full" {...wrapperProps}>
         {renderedProducts.map(({ product, position, index }) => {
           const { likes = 0, reviews = 0 } = product.seededCounts;
@@ -193,39 +180,38 @@ export default function ProductScroll({ products }) {
                 </div>
               )}
 
-              {/* Right side vertical action buttons. Position adjusted dynamically on small screens to avoid overlap with bottom controls */}
               <div
                 className="pointer-events-auto absolute right-4 -translate-y-1/2 flex flex-col items-center gap-3 sm:gap-4 z-30"
                 style={{ top: actionTop }}
               >
-                <button type="button" onClick={() => toggleLike(product.id)} className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-black/30 text-white">
-                  <Heart className={`h-8 w-8 transition-all ${likedIds.has(product.id) ? "fill-red-500 text-red-500" : "text-white"} ${likePopId === product.id ? "like-pop" : ""}`} />
+                <button type="button" onClick={() => toggleLike(product.id)} className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-white shadow border border-gray-300 text-gray-700">
+                  <Heart className={`h-8 w-8 transition-all ${likedIds.has(product.id) ? "fill-red-500 text-red-500" : "text-gray-700"} ${likePopId === product.id ? "like-pop" : ""}`} />
                 </button>
-                <span className="text-xs text-white/90">{displayLikes.toLocaleString()}</span>
-                <button type="button" onClick={() => setReviewsOpenFor(product.id)} className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-black/30 text-white">
+                <span className="text-xs text-gray-700">{displayLikes.toLocaleString()}</span>
+                <button type="button" onClick={() => setReviewsOpenFor(product.id)} className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-white shadow border border-gray-300 text-gray-700">
                   <MessageCircle className="h-8 w-8" />
                 </button>
-                <span className="text-xs text-white/90">{reviews.toLocaleString()}</span>
-                <button type="button" onClick={() => shareProduct(product)} className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-black/30 text-white">
+                <span className="text-xs text-gray-700">{reviews.toLocaleString()}</span>
+                <button type="button" onClick={() => shareProduct(product)} className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-white shadow border border-gray-300 text-gray-700">
                   <Share2 className="h-8 w-8" />
                 </button>
               </div>
 
-              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-64 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-64 bg-gradient-to-t from-white/90 via-white/50 to-transparent" />
 
               <div className="absolute inset-x-0 bottom-0 z-10" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 1rem)' }}>
-                <div className="text-white px-4 pb-4 md:px-8">
+                <div className="text-gray-900 px-4 pb-4 md:px-8">
                   <h2 className="text-2xl sm:text-3xl md:text-4xl font-semibold">{product.title}</h2>
-                  <p className="text-amber-400 font-bold text-3xl mt-4">${product.price?.toFixed(2) || "N/A"}</p>
+                  <p className="text-amber-600 font-bold text-3xl mt-4">${product.price?.toFixed(2) || "N/A"}</p>
                   <div className="mt-6 flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-3">
                     <button className="inline-flex flex-auto sm:flex-none items-center justify-center gap-2 px-5 py-3 rounded-full bg-amber-500 text-white font-medium min-w-0">
                       <ShoppingCart className="h-6 w-6 sm:h-5 sm:w-5" />
                       <span className="truncate ml-2">Buy Now</span>
                     </button>
-                    <button className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-full bg-slate-700 text-gray-200">
+                    <button className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-full bg-gray-100 text-gray-700 border border-gray-300">
                       <Plus className="h-6 w-6 sm:h-5 sm:w-5" />
                     </button>
-                    <button className="hidden sm:inline-flex items-center justify-center gap-2 px-5 py-3 rounded-full bg-slate-700 text-gray-200">
+                    <button className="hidden sm:inline-flex items-center justify-center gap-2 px-5 py-3 rounded-full bg-gray-100 text-gray-700 border border-gray-300">
                       <Eye className="h-6 w-6 sm:h-5 sm:w-5" />
                     </button>
                   </div>
@@ -237,14 +223,14 @@ export default function ProductScroll({ products }) {
       </div>
 
       {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-black/80 text-white text-sm px-3 py-2 rounded-full shadow-lg">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-gray-800 text-white text-sm px-3 py-2 rounded-full shadow-lg">
           {toast}
         </div>
       )}
       {reviewsOpenFor && (
         <>
-          <div className="fixed inset-0 bg-black/60 z-40" onClick={() => setReviewsOpenFor(null)} />
-          <div className="fixed inset-x-0 bottom-0 z-50 bg-slate-900 border-t border-slate-700 rounded-t-2xl max-h-[70vh] overflow-y-auto shadow-2xl">
+          <div className="fixed inset-0 bg-black/40 z-40" onClick={() => setReviewsOpenFor(null)} />
+          <div className="fixed inset-x-0 bottom-0 z-50 bg-white border-t border-gray-300 rounded-t-2xl max-h-[70vh] overflow-y-auto shadow-2xl">
             {/* Reviews Drawer Content... */}
           </div>
         </>
