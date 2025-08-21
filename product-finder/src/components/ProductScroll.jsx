@@ -167,7 +167,7 @@ export default function ProductScroll({ products }) {
         >
           {/* Product image centered */}
           <img
-            src={p.image}
+            src={p.thumbnail}
             alt={p.title}
             onError={(e) =>
               (e.target.src =
