@@ -1,139 +1,118 @@
-import { useState, useMemo, useEffect } from "react";
-import { Heart, ShoppingCart, Plus } from "lucide-react";
+import { useState, useEffect } from "react";
 
-export default function ProductCard({ product }) {
-  const [isImageLoaded, setIsImageLoaded] = useState(false);
+export default function SearchBar({ onSearch }) {
+  const [input, setInput] = useState("");
+  const [suggestions, setSuggestions] = useState(null);
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
-  // Derive a stable hue from product title/id for subtle, varied gradients
-  const hue = useMemo(() => {
-    const str = String(product?.title ?? product?.id ?? "");
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      hash = (hash << 5) - hash + str.charCodeAt(i);
-      hash |= 0;
+  // Fetch search suggestions when component mounts
+  useEffect(() => {
+    fetch(`${import.meta.env.VITE_API_BASE_URL}/api/search-suggestions`)
+      .then((res) => res.json())
+      .then((data) => setSuggestions(data))
+      .catch((err) => console.error("Failed to fetch suggestions:", err));
+  }, []);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (input.trim()) {
+      onSearch(input.trim());
+      setShowSuggestions(false);
     }
-    const value = Math.abs(hash % 360);
-    return value;
-  }, [product?.title, product?.id]);
-
-  const gradientStyle = useMemo(() => {
-    const hue2 = (hue + 50) % 360;
-    return {
-      background:
-        `radial-gradient(120% 90% at 0% 0%, hsla(${hue}, 80%, 55%, 0.12) 0%, transparent 50%),` +
-        `radial-gradient(120% 90% at 100% 100%, hsla(${hue2}, 80%, 55%, 0.12) 0%, transparent 50%)`,
-    };
-  }, [hue]);
-
-  const handleImageError = (e) => {
-    e.target.src =
-      "https://via.placeholder.com/600x750/e5e7eb/374151?text=No+Image";
   };
 
-  // Like state persisted to localStorage
-  const [isLiked, setIsLiked] = useState(false);
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem("likedProducts");
-      const arr = raw ? JSON.parse(raw) : [];
-      setIsLiked(arr.includes(product?.id));
-    } catch {}
-  }, [product?.id]);
+  const handleSuggestionClick = (term) => {
+    setInput(term);
+    onSearch(term);
+    setShowSuggestions(false);
+  };
 
-  const toggleLike = () => {
-    try {
-      const raw = localStorage.getItem("likedProducts");
-      const arr = raw ? JSON.parse(raw) : [];
-      let next;
-      if (arr.includes(product?.id)) {
-        next = arr.filter((id) => id !== product?.id);
-        setIsLiked(false);
-      } else {
-        next = [...arr, product?.id];
-        setIsLiked(true);
-      }
-      localStorage.setItem("likedProducts", JSON.stringify(next));
-    } catch {}
+  const handleInputFocus = () => {
+    setShowSuggestions(true);
+  };
+
+  const handleInputBlur = () => {
+    setTimeout(() => setShowSuggestions(false), 200);
   };
 
   return (
-    <div className="group relative">
-      {/* Card */}
-      <div className="relative rounded-2xl bg-white border border-gray-200 shadow-md hover:shadow-lg transition-all duration-300 overflow-hidden">
-        {/* Subtle per-card gradient background */}
-        <div
-          className="absolute inset-0 opacity-10 group-hover:opacity-20 transition-opacity"
-          style={gradientStyle}
-        />
-
-        {/* Image */}
-        <div className="relative aspect-[4/5] bg-gray-100 flex items-center justify-center">
-          {!isImageLoaded && (
-            <div className="absolute inset-0 animate-pulse bg-gray-200" />
-          )}
-          <img
-            src={product.thumbnail}
-            alt={product.title}
-            loading="lazy"
-            onLoad={() => setIsImageLoaded(true)}
-            onError={handleImageError}
-            className="h-full w-auto max-h-full object-contain drop-shadow-md transition-transform duration-500 ease-out group-hover:scale-105"
+    <div className="relative w-full px-2">
+      <form onSubmit={handleSubmit} className="flex justify-center gap-2 w-full">
+        <div className="relative flex-1 max-w-full sm:max-w-xl">
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onFocus={handleInputFocus}
+            onBlur={handleInputBlur}
+            placeholder="Search products..."
+            className="w-full rounded-full border border-gray-300 bg-white/80 backdrop-blur px-4 sm:px-5 py-2.5 sm:py-3 text-sm sm:text-base text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-4 focus:ring-amber-400 shadow-sm transition"
           />
 
-          {/* Floating action icons */}
-          <button
-            type="button"
-            aria-label="Like product"
-            aria-pressed={isLiked}
-            onClick={toggleLike}
-            className={`absolute top-3 right-3 inline-flex h-9 w-9 items-center justify-center rounded-full shadow-md transition-colors ${
-              isLiked
-                ? "bg-pink-500 text-white"
-                : "bg-white hover:bg-gray-100 text-gray-600"
-            }`}
-          >
-            <Heart className="h-4 w-4" />
-          </button>
-          <div className="absolute left-3 top-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-            <span className="inline-flex h-8 items-center rounded-full bg-white/90 px-2 text-xs font-medium text-gray-600 shadow">
-              Featured
-            </span>
-            <span className="inline-flex h-8 items-center rounded-full bg-amber-500 px-2 text-xs font-medium text-white shadow">
-              New
-            </span>
-          </div>
+          {/* Search Suggestions Dropdown */}
+          {showSuggestions && suggestions && (
+            <div className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-2xl shadow-xl mt-2 z-10 max-h-72 sm:max-h-96 overflow-y-auto text-sm sm:text-base">
+              {/* Popular Search Terms */}
+              <div className="p-3 border-b border-gray-200">
+                <h4 className="text-xs sm:text-sm font-semibold text-gray-700 mb-2">Popular Searches</h4>
+                <div className="flex flex-wrap gap-2">
+                  {suggestions.popular_terms?.slice(0, 8).map((term, index) => (
+                    <button
+                      key={index}
+                      type="button"
+                      onClick={() => handleSuggestionClick(term)}
+                      className="px-2.5 sm:px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full text-xs sm:text-sm transition-colors shadow-sm"
+                    >
+                      {term}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Categories */}
+              <div className="p-3 border-b border-gray-200">
+                <h4 className="text-xs sm:text-sm font-semibold text-gray-700 mb-2">Categories</h4>
+                <div className="flex flex-wrap gap-2">
+                  {suggestions.categories?.map((category, index) => (
+                    <button
+                      key={index}
+                      type="button"
+                      onClick={() => handleSuggestionClick(category)}
+                      className="px-2.5 sm:px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full text-xs sm:text-sm transition-colors shadow-sm"
+                    >
+                      {category}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Example Searches */}
+              <div className="p-3">
+                <h4 className="text-xs sm:text-sm font-semibold text-gray-700 mb-2">Try These</h4>
+                <div className="flex flex-wrap gap-2">
+                  {suggestions.examples?.map((example, index) => (
+                    <button
+                      key={index}
+                      type="button"
+                      onClick={() => handleSuggestionClick(example)}
+                      className="px-2.5 sm:px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full text-xs sm:text-sm transition-colors shadow-sm"
+                    >
+                      {example}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Content */}
-        <div className="p-4">
-          <h2 className="text-gray-800 font-semibold text-base leading-snug line-clamp-2 min-h-[2.5rem]">
-            {product.title}
-          </h2>
-
-          <div className="mt-3 flex items-center justify-between">
-            <p className="text-amber-600 font-bold text-lg">
-              ${product.price?.toFixed(2) || "N/A"}
-            </p>
-            {product.category && (
-              <span className="px-2.5 py-1 rounded-full text-[11px] font-medium bg-gray-100 text-gray-600 capitalize border border-gray-300">
-                {product.category}
-              </span>
-            )}
-          </div>
-
-          {/* Actions */}
-          <div className="mt-4 flex items-center gap-2">
-            <button className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-full bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium shadow-md">
-              <ShoppingCart className="h-4 w-4" />
-              Buy Now
-            </button>
-            <button className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-full bg-gray-200 hover:bg-gray-300 text-gray-700 text-sm font-medium">
-              <Plus className="h-4 w-4" />
-              Add to Cart
-            </button>
-          </div>
-        </div>
-      </div>
+        <button
+          type="submit"
+          className="rounded-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white px-4 sm:px-6 py-2.5 sm:py-3 shadow-lg font-semibold text-sm sm:text-base transition-transform active:scale-95"
+        >
+          Search
+        </button>
+      </form>
     </div>
   );
 }
