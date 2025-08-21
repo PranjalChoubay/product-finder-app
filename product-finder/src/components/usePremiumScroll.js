@@ -125,8 +125,8 @@ export function usePremiumScroll(products) {
       let targetPhysicalIndex = currentPhysicalIndex;
 
       // Determine target based on flick velocity or drag distance
-      const flickThreshold = 0.1;
-      const distanceThreshold = vh * 0.1;
+      const flickThreshold = 0.075;
+      const distanceThreshold = vh * 0.075;
 
       if (Math.abs(velocity) > flickThreshold) {
         targetPhysicalIndex = velocity > 0 ? currentPhysicalIndex + 1 : currentPhysicalIndex - 1;
