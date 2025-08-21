@@ -24,7 +24,7 @@ export default function App() {
       setLoading(true);
       setError("");
       // This is the line that has been corrected
-      fetch(`/api/search?q=${encodeURIComponent(query)}`)
+      fetch(`${import.meta.env.VITE_API_BASE_URL}/api/search?q=${encodeURIComponent(query)}`)
         .then((res) => {
           if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
           return res.json();

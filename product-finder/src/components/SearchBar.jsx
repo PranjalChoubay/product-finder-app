@@ -7,7 +7,7 @@ export default function SearchBar({ onSearch }) {
 
   // Fetch search suggestions when component mounts
   useEffect(() => {
-    fetch("/api/search-suggestions")
+    fetch(`${import.meta.env.VITE_API_BASE_URL}/api/search-suggestions`)
       .then((res) => res.json())
       .then((data) => setSuggestions(data))
       .catch((err) => console.error("Failed to fetch suggestions:", err));
